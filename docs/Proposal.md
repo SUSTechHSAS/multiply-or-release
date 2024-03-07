@@ -9,6 +9,8 @@ Team members:
 
 https://www.youtube.com/watch?v=dL-AK1RSsO4
 
+Multiply or Release, sometimes abbreviated as MoR, is an Algodoo battle genre on Youtube, originally invented by MIKAN. Since the first video in July 15th in 2021, till now it is one of the most popular genre on Youtube, and there are many variants, integration with many other genre, and extension to many other platform like Unity, Scratch, etc.
+
 ## Additional Details
 
 ### Use Case
