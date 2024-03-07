@@ -15,6 +15,14 @@ https://www.youtube.com/watch?v=dL-AK1RSsO4
 
 ### Code Design
 
+All app logic in Bevy uses the Entity Component System paradigm, which is often shortened to ECS. 
+ECS is a software pattern that involves breaking your program up into Entities, Components, and 
+Systems. Entities are unique "things" that are assigned groups of Components, which are then 
+processed using Systems.
+
+See [Bevy Quick Start Guide](https://bevyengine.org/learn/quick-start/getting-started/ecs/) and 
+[Tainted Coder's Tutorial on ECS](https://taintedcoders.com/bevy/ecs/).
+
 #### Key Data structures
 
 ```rust
