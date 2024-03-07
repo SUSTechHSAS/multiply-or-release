@@ -178,7 +178,16 @@ We have no idea at this moment to be honest. We'll look into it.
 
 ### Minimal Viable Product
 
-### Stretch Goals
+The functionality of the simulation as shown in 
+[the video](https://www.youtube.com/watch?v=dL-AK1RSsO4) minus the visual effects:
+
+- The trail the balls leave as they move.
+- The particle effects of the tiles changing color.
+- The crosshair that pops up when the turrets shoot.
+
 
 ### Checkpoint
+
+- Finish the worker_panel module.
+- Define stretch goals to pursue after the minimal viable product is done.
 
