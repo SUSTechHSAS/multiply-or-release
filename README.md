@@ -1,7 +1,28 @@
-# Project Title
+# Multiply or Release — Charged Shot vs Burst Shot
 
-Team members:
+https://www.youtube.com/watch?v=dL-AK1RSsO4
 
-- Name1
-- Name2
-- Name3
+## Team members:
+
+- Raven Du
+- Robert Alemany
+
+## Use Cases
+
+
+
+## Code Design
+
+### Plugins (Modules)
+
+
+## Testing
+
+## Roadmap
+
+### Minimal Viable Product
+
+### Stretch Goals
+
+### Checkpoint
+
