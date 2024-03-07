@@ -125,6 +125,8 @@ struct TurretHeadBundle<M: Material2d> {
     th: TurretHead,
     /// Bevy rendering component used to display the ball.
     mesh: MaterialMesh2dBundle<M>,
+    /// A sensor collider to detect when this turret is hit by a bullet.
+    collider: Collider,
     /// The game participant that owns this ball.
     owner: Participant,
     /// Some text component for bevy to render the text onto the ball
