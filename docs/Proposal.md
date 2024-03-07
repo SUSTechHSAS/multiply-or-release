@@ -17,6 +17,8 @@ Multiply or Release, sometimes abbreviated as MoR, is an Algodoo battle genre on
 
 The user runs the program, screams "All hail the RNGesus!" and watches.
 
+At this current moment, our minimum viable product doesn't include user interaction other than starting the program. We are still debating whether we even want user interactivity for this project, as it defeats the purpose of the siulation, which is meant to be watched and enjoyed. 
+
 ### Code Design
 
 All app logic in Bevy uses the Entity Component System paradigm, which is often shortened to ECS. 
@@ -186,6 +188,14 @@ The functionality of the simulation as shown in
 - The trail the balls leave as they move.
 - The particle effects of the tiles changing color.
 - The crosshair that pops up when the turrets shoot.
+
+
+### Possible Stretch goals (we want to finilize this after some actual implementation)
+
+- More powerups for the simulation
+- Statistics for the simulation
+- Random events that could happen to the battlefield (like applying a force onto all objects like say wind)
+- UI main menu/settings menu
 
 
 ### Checkpoint
