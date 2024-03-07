@@ -15,6 +15,8 @@ Multiply or Release, sometimes abbreviated as MoR, is an Algodoo battle genre on
 
 ### Use Case
 
+The user runs the program, screams "All hail the RNGesus!" and watches.
+
 ### Code Design
 
 All app logic in Bevy uses the Entity Component System paradigm, which is often shortened to ECS. 
