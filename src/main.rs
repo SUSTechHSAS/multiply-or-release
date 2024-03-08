@@ -1,37 +1,26 @@
-# Multiply or Release — Charged Shot vs Burst Shot
+#![allow(dead_code)]
 
-Team members:
+use bevy::{
+    prelude::*,
+    sprite::{Material2d, MaterialMesh2dBundle},
+};
+use bevy_rapier2d::prelude::*;
 
-- Raven Du
-- Robert Alemany
+const WINDOW_TITLE: &str = "Multiply or Release";
 
-## Summary Description
+fn main() {
+    let window_plugin = WindowPlugin {
+        primary_window: Some(Window {
+            title: WINDOW_TITLE.to_string(),
+            ..default()
+        }),
+        ..default()
+    };
+    App::new()
+        .add_plugins(DefaultPlugins.set(window_plugin))
+        .run();
+}
 
-https://www.youtube.com/watch?v=dL-AK1RSsO4
-
-Multiply or Release, sometimes abbreviated as MoR, is an Algodoo battle genre on Youtube, originally invented by MIKAN. Since the first video in July 15th in 2021, till now it is one of the most popular genre on Youtube, and there are many variants, integration with many other genre, and extension to many other platform like Unity, Scratch, etc.
-
-## Additional Details
-
-### Use Case
-
-The user runs the program, screams "All hail the RNGesus!" and watches.
-
-At this current moment, our minimum viable product doesn't include user interaction other than starting the program. We are still debating whether we even want user interactivity for this project, as it defeats the purpose of the siulation, which is meant to be watched and enjoyed. 
-
-### Code Design
-
-All app logic in Bevy uses the Entity Component System paradigm, which is often shortened to ECS. 
-ECS is a software pattern that involves breaking your program up into Entities, Components, and 
-Systems. Entities are unique "things" that are assigned groups of Components, which are then 
-processed using Systems.
-
-See [Bevy Quick Start Guide](https://bevyengine.org/learn/quick-start/getting-started/ecs/) and 
-[Tainted Coder's Tutorial on ECS](https://taintedcoders.com/bevy/ecs/).
-
-#### Key Data structures
-
-```rust
 #[derive(Component)]
 /// A game participant. It's not called player since the game is not interactive.
 enum Participant {
@@ -163,43 +152,3 @@ struct TurretBundle<M: Material2d> {
     /// Variables for the functionality of the turret.
     turret: Turret,
 }
-```
-
-#### Modules
-
-We'll separate the whole application into 3 modules:
-- worker_panel (the panels on the side that simulates a normal distribution ball drop and triggers 
-turret events)
-- battlefield (the center battlefield where the turrets shoot bullets that interact with each 
-other as well as the ground)
-- main (puts everything together and instantiate the bevy instance)
-
-#### Testing
-
-We have no idea at this moment to be honest. We'll look into it.
-
-## Roadmap
-
-### Minimal Viable Product
-
-The functionality of the simulation as shown in 
-[the video](https://www.youtube.com/watch?v=dL-AK1RSsO4) minus the visual effects:
-
-- The trail the balls leave as they move.
-- The particle effects of the tiles changing color.
-- The crosshair that pops up when the turrets shoot.
-
-
-### Possible Stretch goals (we want to finilize this after some actual implementation)
-
-- More powerups for the simulation
-- Statistics for the simulation
-- Random events that could happen to the battlefield (like applying a force onto all objects like say wind)
-- UI main menu/settings menu
-
-
-### Checkpoint
-
-- Finish the worker_panel module.
-- Define stretch goals to pursue after the minimal viable product is done.
-
