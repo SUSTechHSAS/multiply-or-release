@@ -4,7 +4,11 @@ use bevy::{
     prelude::*,
     sprite::{Material2d, MaterialMesh2dBundle},
 };
+use bevy_inspector_egui::quick::WorldInspectorPlugin;
 use bevy_rapier2d::prelude::*;
+use panel_plugin::PanelPlugin;
+
+mod panel_plugin;
 
 const WINDOW_TITLE: &str = "Multiply or Release";
 
@@ -18,7 +22,16 @@ fn main() {
     };
     App::new()
         .add_plugins(DefaultPlugins.set(window_plugin))
+        .add_plugins(RapierPhysicsPlugin::<NoUserData>::default())
+        .add_plugins(RapierDebugRenderPlugin::default())
+        .add_plugins(WorldInspectorPlugin::new())
+        .add_plugins(PanelPlugin)
+        .add_systems(Startup, setup)
         .run();
+}
+
+fn setup(mut commands: Commands) {
+    commands.spawn((Name::new("Camera"), Camera2dBundle::default()));
 }
 
 #[derive(Component)]
