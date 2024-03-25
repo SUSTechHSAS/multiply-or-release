@@ -43,20 +43,6 @@ enum Participant {
     D,
 }
 
-#[derive(Bundle)]
-/// Component bundle for the round obstacles in the side panels and the walls.
-/// (I don't know if meshes and colliders have to be continous. Maybe we can just make a single
-/// entity for the entire obstacle course.)
-struct ObstacleBundle<M: Material2d> {
-    /// Bevy rendering component used to display the ball.
-    mesh: MaterialMesh2dBundle<M>,
-    /// Rapier collider component.
-    collider: Collider,
-    /// Rapier rigidbody component. We'll set this to static since we don't want these to move, but
-    /// we'd other balls to bounce off it.
-    rigidbody: RigidBody,
-}
-
 #[derive(Component)]
 /// Marker to mark this entity as a trigger zone.
 struct TriggerZone;
