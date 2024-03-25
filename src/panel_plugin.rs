@@ -1,3 +1,5 @@
+use std::time::Duration;
+
 use bevy::{
     prelude::*,
     sprite::{MaterialMesh2dBundle, Mesh2dHandle},
@@ -5,9 +7,12 @@ use bevy::{
 use bevy_rapier2d::prelude::*;
 use rand::{distributions::Uniform, thread_rng, Rng};
 
+use crate::{utils::ParticipantInfo, Participant};
+
 // Constants {{{
 
 // Configurable
+
 const WALL_THICKNESS: f32 = 10.0;
 const WALL_COLOR: Color = Color::rgb(0.8, 0.8, 0.8);
 const ARENA_COLOR: Color = Color::DARK_GRAY;
@@ -34,9 +39,10 @@ const CIRCLE_GRID_HORIZONTAL_GAP: f32 = 25.0;
 const CIRCLE_GRID_HORIZONTAL_HALF_COUNT: usize = 2;
 
 const WORKER_BALL_RADIUS: f32 = 5.0;
-const WORKER_BALL_COLOR: Color = Color::GREEN;
-const WORKER_BALL_SPAWN_Y: f32 = 300.0;
+const WORKER_BALL_SPAWN_Y: f32 = 250.0;
 const WORKER_BALL_RESTITUTION_COEFFICIENT: f32 = 1.0;
+const WORKER_BALL_SPAWN_TIMER_SECS: f32 = 60.0;
+const WORKER_BALL_COUNT_MAX: usize = 5;
 
 // Z-index
 const WALL_Z: f32 = 0.0;
@@ -56,13 +62,16 @@ const ARENA_WIDTH_FRAC_8: f32 = ARENA_WIDTH / 8.0;
 const CIRCLE_HALF_GAP: f32 = CIRCLE_PYRAMID_HORIZONTAL_GAP / 2.0;
 const CIRCLE_DIAMETER: f32 = CIRCLE_RADIUS * 2.0;
 
+const WORKER_BALL_DIAMETER: f32 = WORKER_BALL_RADIUS * 2.0;
+
 // }}}
 
 pub struct PanelPlugin;
 impl Plugin for PanelPlugin {
     fn build(&self, app: &mut App) {
         app.add_systems(Startup, setup)
-            .add_systems(PostStartup, spawn_workers);
+            .add_systems(Update, spawn_workers)
+            .add_systems(Update, collision);
     }
 }
 
@@ -97,20 +106,51 @@ impl TriggerZoneBundle {
             markers: (TriggerZone, ActiveEvents::COLLISION_EVENTS, Sensor),
         }
     }
+    // }}}
 }
 #[derive(Component, Clone, Copy, Default)]
 /// Marker to mark this entity as a worker ball.
 struct WorkerBall;
-#[derive(Bundle, Clone, Resource, Default)]
+#[derive(Resource, Clone, Default)]
+struct WorkerBallSpawner {
+    mesh: Mesh2dHandle,
+    timer: Timer,
+    counter: usize,
+}
+#[derive(Bundle, Clone, Default)]
 struct WorkerBallBundle {
     // {{{
     marker: WorkerBall,
+    participant: Participant,
     matmesh: MaterialMesh2dBundle<ColorMaterial>,
     collider: Collider,
     restitution: Restitution,
     rigidbody: RigidBody,
 }
 impl WorkerBallBundle {
+    fn new(
+        participant: Participant,
+        x: f32,
+        mesh: Mesh2dHandle,
+        material: Handle<ColorMaterial>,
+    ) -> Self {
+        Self {
+            marker: WorkerBall,
+            participant,
+            matmesh: MaterialMesh2dBundle {
+                transform: Transform::from_xyz(x, WORKER_BALL_SPAWN_Y, WORKER_BALL_Z),
+                material,
+                mesh,
+                ..default()
+            },
+            collider: Collider::ball(WORKER_BALL_RADIUS),
+            restitution: Restitution {
+                coefficient: WORKER_BALL_RESTITUTION_COEFFICIENT,
+                combine_rule: CoefficientCombineRule::Max,
+            },
+            rigidbody: RigidBody::Dynamic,
+        }
+    }
     fn rand_x(&mut self) {
         self.matmesh.transform.translation.x =
             thread_rng().sample(Uniform::new(-ARENA_WIDTH_FRAC_2, ARENA_WIDTH_FRAC_2));
@@ -200,21 +240,28 @@ fn setup(
     mut materials: ResMut<Assets<ColorMaterial>>,
     mut meshes: ResMut<Assets<Mesh>>,
 ) {
-    commands.insert_resource(WorkerBallBundle {
-        marker: WorkerBall,
-        matmesh: MaterialMesh2dBundle {
-            transform: Transform::from_xyz(0.0, WORKER_BALL_SPAWN_Y, WORKER_BALL_Z),
-            mesh: meshes.add(Circle::new(WORKER_BALL_RADIUS)).into(),
-            material: materials.add(WORKER_BALL_COLOR),
-            ..default()
-        },
-        collider: Collider::ball(WORKER_BALL_RADIUS),
-        restitution: Restitution {
-            coefficient: WORKER_BALL_RESTITUTION_COEFFICIENT,
-            combine_rule: CoefficientCombineRule::Max,
-        },
-        rigidbody: RigidBody::Dynamic,
+    let mut timer = Timer::from_seconds(WORKER_BALL_SPAWN_TIMER_SECS, TimerMode::Repeating);
+    timer.tick(Duration::from_secs_f32(WORKER_BALL_SPAWN_TIMER_SECS));
+    commands.insert_resource(WorkerBallSpawner {
+        mesh: Mesh2dHandle(meshes.add(Circle::new(WORKER_BALL_RADIUS))),
+        timer,
+        counter: 0,
     });
+    // commands.insert_resource(WorkerBallBundle {
+    //     marker: WorkerBall,
+    //     participant: Participant::default(),
+    //     matmesh: MaterialMesh2dBundle {
+    //         transform: Transform::from_xyz(0.0, WORKER_BALL_SPAWN_Y, WORKER_BALL_Z),
+    //         mesh: meshes.add(Circle::new(WORKER_BALL_RADIUS)).into(),
+    //         ..default()
+    //     },
+    //     collider: Collider::ball(WORKER_BALL_RADIUS),
+    //     restitution: Restitution {
+    //         coefficient: WORKER_BALL_RESTITUTION_COEFFICIENT,
+    //         combine_rule: CoefficientCombineRule::Max,
+    //     },
+    //     rigidbody: RigidBody::Dynamic,
+    // });
     commands
         .spawn((
             Name::new("PanelRoot"),
@@ -344,8 +391,89 @@ fn setup(
             });
         });
 }
-fn spawn_workers(mut commands: Commands, template: Res<WorkerBallBundle>) {
-    let mut bundle = template.clone();
-    bundle.rand_x();
-    commands.spawn(bundle);
+fn spawn_workers(
+    mut commands: Commands,
+    mut spawner: ResMut<WorkerBallSpawner>,
+    time: Res<Time>,
+    rapier: Res<RapierContext>,
+    participant_info: Res<ParticipantInfo>,
+) {
+    if spawner.timer.just_finished() {
+        let collider = Collider::ball(WORKER_BALL_RADIUS);
+        let mut rng = thread_rng();
+        let dist = Uniform::new(-ARENA_WIDTH_FRAC_2, ARENA_WIDTH_FRAC_2);
+        let mut f = || loop {
+            let x = rng.sample(dist);
+            if rapier
+                .intersection_with_shape(
+                    Vect::new(x, WORKER_BALL_SPAWN_Y),
+                    0.0,
+                    &collider,
+                    QueryFilter::default(),
+                )
+                .is_none()
+            {
+                return x;
+            }
+        };
+        fn too_close(a: f32, b: f32) -> bool {
+            (a - b).abs() <= WORKER_BALL_DIAMETER
+        }
+        let x0 = f();
+        let x1 = {
+            let mut x1 = f();
+            while too_close(x0, x1) {
+                x1 = f();
+            }
+            x1
+        };
+        let x2 = {
+            let mut x2 = f();
+            while too_close(x0, x2) || too_close(x1, x2) {
+                x2 = f();
+            }
+            x2
+        };
+        let x3 = {
+            let mut x3 = f();
+            while too_close(x0, x3) || too_close(x1, x3) || too_close(x2, x3) {
+                x3 = f();
+            }
+            x3
+        };
+        commands.spawn(WorkerBallBundle::new(
+            Participant::A,
+            x0,
+            spawner.mesh.clone(),
+            participant_info.colors.a.clone(),
+        ));
+        commands.spawn(WorkerBallBundle::new(
+            Participant::B,
+            x1,
+            spawner.mesh.clone(),
+            participant_info.colors.b.clone(),
+        ));
+        commands.spawn(WorkerBallBundle::new(
+            Participant::C,
+            x2,
+            spawner.mesh.clone(),
+            participant_info.colors.c.clone(),
+        ));
+        commands.spawn(WorkerBallBundle::new(
+            Participant::D,
+            x3,
+            spawner.mesh.clone(),
+            participant_info.colors.d.clone(),
+        ));
+        spawner.counter += 1;
+    }
+    spawner.timer.tick(time.delta());
+    // let mut bundle = template.clone();
+    // bundle.rand_x();
+    // commands.spawn(bundle);
+}
+fn collision(mut events: EventReader<CollisionEvent>) {
+    for collision_event in events.read() {
+        println!("Received collision event: {:?}", collision_event);
+    }
 }

@@ -7,8 +7,10 @@ use bevy::{
 use bevy_inspector_egui::quick::WorldInspectorPlugin;
 use bevy_rapier2d::prelude::*;
 use panel_plugin::PanelPlugin;
+use utils::{Participant, UtilsPlugin};
 
 mod panel_plugin;
+mod utils;
 
 const WINDOW_TITLE: &str = "Multiply or Release";
 
@@ -25,22 +27,13 @@ fn main() {
         .add_plugins(RapierPhysicsPlugin::<NoUserData>::default())
         .add_plugins(RapierDebugRenderPlugin::default())
         .add_plugins(WorldInspectorPlugin::new())
-        .add_plugins(PanelPlugin)
+        .add_plugins((UtilsPlugin, PanelPlugin))
         .add_systems(Startup, setup)
         .run();
 }
 
 fn setup(mut commands: Commands) {
     commands.spawn((Name::new("Camera"), Camera2dBundle::default()));
-}
-
-#[derive(Component)]
-/// A game participant. It's not called player since the game is not interactive.
-enum Participant {
-    A,
-    B,
-    C,
-    D,
 }
 
 #[derive(Component)]
