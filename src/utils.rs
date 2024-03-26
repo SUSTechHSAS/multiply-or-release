@@ -54,7 +54,7 @@ impl<T> ParticipantMap<T> {
     // }}}
 }
 
-#[derive(Component, Clone, Copy, Default)]
+#[derive(Debug, Component, Clone, Copy, Default)]
 /// A game participant. It's not called player since the game is not interactive.
 pub enum Participant {
     #[default]

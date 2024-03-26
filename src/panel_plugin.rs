@@ -41,7 +41,7 @@ const CIRCLE_GRID_HORIZONTAL_HALF_COUNT: usize = 2;
 const WORKER_BALL_RADIUS: f32 = 5.0;
 const WORKER_BALL_SPAWN_Y: f32 = 250.0;
 const WORKER_BALL_RESTITUTION_COEFFICIENT: f32 = 1.0;
-const WORKER_BALL_SPAWN_TIMER_SECS: f32 = 60.0;
+const WORKER_BALL_SPAWN_TIMER_SECS: f32 = 10.0;
 const WORKER_BALL_COUNT_MAX: usize = 5;
 
 // Z-index
@@ -69,29 +69,34 @@ const WORKER_BALL_DIAMETER: f32 = WORKER_BALL_RADIUS * 2.0;
 pub struct PanelPlugin;
 impl Plugin for PanelPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(Startup, setup)
-            .add_systems(Update, spawn_workers)
-            .add_systems(Update, collision);
+        app.add_event::<TriggerEvent>()
+            .add_systems(Startup, setup)
+            .add_systems(Update, spawn_workers.run_if(spawn_workers_condition))
+            .add_systems(Update, (trigger_event, print_trigger_events, ball_reset));
     }
 }
 
-#[derive(Component, Clone, Copy, Default)]
-struct MultiplyTrigger;
-#[derive(Component, Clone, Copy, Default)]
-struct BurstShotTrigger;
-#[derive(Component, Clone, Copy, Default)]
-struct ChargedShotTrigger;
-#[derive(Component, Clone, Copy, Default)]
-struct TriggerZone;
-#[derive(Bundle, Clone, Resource, Default)]
+#[derive(Debug, Event)]
+pub struct TriggerEvent {
+    pub participant: Participant,
+    pub trigger_type: TriggerType,
+}
+#[derive(Debug, Component, Clone, Copy)]
+pub enum TriggerType {
+    Multiply,
+    BurstShot,
+    ChargedShot,
+}
+#[derive(Bundle, Clone, Resource)]
 struct TriggerZoneBundle {
     // {{{
     sprite_bundle: SpriteBundle,
     collider: Collider,
-    markers: (TriggerZone, ActiveEvents, Sensor),
+    trigger_type: TriggerType,
+    markers: (ActiveEvents, Sensor),
 }
 impl TriggerZoneBundle {
-    fn new(size: Vec2, translation: Vec3, color: Color) -> Self {
+    fn new(trigger_type: TriggerType, size: Vec2, translation: Vec3, color: Color) -> Self {
         Self {
             sprite_bundle: SpriteBundle {
                 sprite: Sprite { color, ..default() },
@@ -103,7 +108,8 @@ impl TriggerZoneBundle {
                 ..default()
             },
             collider: Collider::cuboid(0.5, 0.5),
-            markers: (TriggerZone, ActiveEvents::COLLISION_EVENTS, Sensor),
+            trigger_type,
+            markers: (ActiveEvents::COLLISION_EVENTS, Sensor),
         }
     }
     // }}}
@@ -126,6 +132,7 @@ struct WorkerBallBundle {
     collider: Collider,
     restitution: Restitution,
     rigidbody: RigidBody,
+    velocity: Velocity,
 }
 impl WorkerBallBundle {
     fn new(
@@ -149,6 +156,7 @@ impl WorkerBallBundle {
                 combine_rule: CoefficientCombineRule::Max,
             },
             rigidbody: RigidBody::Dynamic,
+            velocity: Velocity::zero(),
         }
     }
     fn rand_x(&mut self) {
@@ -247,21 +255,6 @@ fn setup(
         timer,
         counter: 0,
     });
-    // commands.insert_resource(WorkerBallBundle {
-    //     marker: WorkerBall,
-    //     participant: Participant::default(),
-    //     matmesh: MaterialMesh2dBundle {
-    //         transform: Transform::from_xyz(0.0, WORKER_BALL_SPAWN_Y, WORKER_BALL_Z),
-    //         mesh: meshes.add(Circle::new(WORKER_BALL_RADIUS)).into(),
-    //         ..default()
-    //     },
-    //     collider: Collider::ball(WORKER_BALL_RADIUS),
-    //     restitution: Restitution {
-    //         coefficient: WORKER_BALL_RESTITUTION_COEFFICIENT,
-    //         combine_rule: CoefficientCombineRule::Max,
-    //     },
-    //     rigidbody: RigidBody::Dynamic,
-    // });
     commands
         .spawn((
             Name::new("PanelRoot"),
@@ -332,37 +325,31 @@ fn setup(
                 }
             }
 
-            parent.spawn((
-                MultiplyTrigger,
-                TriggerZoneBundle::new(
-                    Vec2::new(ARENA_WIDTH_FRAC_2, TRIGGER_ZONE_HEIGHT),
-                    Vec3::new(0.0, TRIGGER_ZONE_Y, TRIGGER_ZONE_Z),
-                    MULTIPLY_ZONE_COLOR,
-                ),
+            parent.spawn(TriggerZoneBundle::new(
+                TriggerType::Multiply,
+                Vec2::new(ARENA_WIDTH_FRAC_2, TRIGGER_ZONE_HEIGHT),
+                Vec3::new(0.0, TRIGGER_ZONE_Y, TRIGGER_ZONE_Z),
+                MULTIPLY_ZONE_COLOR,
             ));
-            parent.spawn((
-                BurstShotTrigger,
-                TriggerZoneBundle::new(
-                    Vec2::new(ARENA_WIDTH_FRAC_4, TRIGGER_ZONE_HEIGHT),
-                    Vec3::new(
-                        ARENA_WIDTH_FRAC_4 + ARENA_WIDTH_FRAC_8,
-                        TRIGGER_ZONE_Y,
-                        TRIGGER_ZONE_Z,
-                    ),
-                    BURST_SHOT_ZONE_COLOR,
+            parent.spawn(TriggerZoneBundle::new(
+                TriggerType::BurstShot,
+                Vec2::new(ARENA_WIDTH_FRAC_4, TRIGGER_ZONE_HEIGHT),
+                Vec3::new(
+                    ARENA_WIDTH_FRAC_4 + ARENA_WIDTH_FRAC_8,
+                    TRIGGER_ZONE_Y,
+                    TRIGGER_ZONE_Z,
                 ),
+                BURST_SHOT_ZONE_COLOR,
             ));
-            parent.spawn((
-                ChargedShotTrigger,
-                TriggerZoneBundle::new(
-                    Vec2::new(ARENA_WIDTH_FRAC_4, TRIGGER_ZONE_HEIGHT),
-                    Vec3::new(
-                        -ARENA_WIDTH_FRAC_4 - ARENA_WIDTH_FRAC_8,
-                        TRIGGER_ZONE_Y,
-                        TRIGGER_ZONE_Z,
-                    ),
-                    CHARGED_SHOT_ZONE_COLOR,
+            parent.spawn(TriggerZoneBundle::new(
+                TriggerType::ChargedShot,
+                Vec2::new(ARENA_WIDTH_FRAC_4, TRIGGER_ZONE_HEIGHT),
+                Vec3::new(
+                    -ARENA_WIDTH_FRAC_4 - ARENA_WIDTH_FRAC_8,
+                    TRIGGER_ZONE_Y,
+                    TRIGGER_ZONE_Z,
                 ),
+                CHARGED_SHOT_ZONE_COLOR,
             ));
 
             parent.spawn(SpriteBundle {
@@ -391,12 +378,16 @@ fn setup(
             });
         });
 }
+fn spawn_workers_condition(spawner: Res<WorkerBallSpawner>) -> bool {
+    spawner.counter < WORKER_BALL_COUNT_MAX
+}
 fn spawn_workers(
     mut commands: Commands,
     mut spawner: ResMut<WorkerBallSpawner>,
     time: Res<Time>,
     rapier: Res<RapierContext>,
     participant_info: Res<ParticipantInfo>,
+    root: Query<Entity, With<PanelRoot>>,
 ) {
     if spawner.timer.just_finished() {
         let collider = Collider::ball(WORKER_BALL_RADIUS);
@@ -441,39 +432,128 @@ fn spawn_workers(
             }
             x3
         };
-        commands.spawn(WorkerBallBundle::new(
-            Participant::A,
-            x0,
-            spawner.mesh.clone(),
-            participant_info.colors.a.clone(),
-        ));
-        commands.spawn(WorkerBallBundle::new(
-            Participant::B,
-            x1,
-            spawner.mesh.clone(),
-            participant_info.colors.b.clone(),
-        ));
-        commands.spawn(WorkerBallBundle::new(
-            Participant::C,
-            x2,
-            spawner.mesh.clone(),
-            participant_info.colors.c.clone(),
-        ));
-        commands.spawn(WorkerBallBundle::new(
-            Participant::D,
-            x3,
-            spawner.mesh.clone(),
-            participant_info.colors.d.clone(),
-        ));
+        let root = root.single();
+        commands
+            .spawn(WorkerBallBundle::new(
+                Participant::A,
+                x0,
+                spawner.mesh.clone(),
+                participant_info.colors.a.clone(),
+            ))
+            .set_parent(root);
+        commands
+            .spawn(WorkerBallBundle::new(
+                Participant::B,
+                x1,
+                spawner.mesh.clone(),
+                participant_info.colors.b.clone(),
+            ))
+            .set_parent(root);
+        commands
+            .spawn(WorkerBallBundle::new(
+                Participant::C,
+                x2,
+                spawner.mesh.clone(),
+                participant_info.colors.c.clone(),
+            ))
+            .set_parent(root);
+        commands
+            .spawn(WorkerBallBundle::new(
+                Participant::D,
+                x3,
+                spawner.mesh.clone(),
+                participant_info.colors.d.clone(),
+            ))
+            .set_parent(root);
         spawner.counter += 1;
     }
     spawner.timer.tick(time.delta());
-    // let mut bundle = template.clone();
-    // bundle.rand_x();
-    // commands.spawn(bundle);
 }
-fn collision(mut events: EventReader<CollisionEvent>) {
-    for collision_event in events.read() {
-        println!("Received collision event: {:?}", collision_event);
+fn trigger_event(
+    mut collision_events: EventReader<CollisionEvent>,
+    mut event_writer: EventWriter<TriggerEvent>,
+    trigger_zone_query: Query<&TriggerType>,
+    worker_ball_query: Query<&Participant, With<WorkerBall>>,
+) {
+    for collision_event in collision_events.read() {
+        match collision_event {
+            &CollisionEvent::Started(a, b, _) => {
+                let &trigger_type = if let Ok(x) = trigger_zone_query.get(a) {
+                    x
+                } else if let Ok(x) = trigger_zone_query.get(b) {
+                    x
+                } else {
+                    continue;
+                };
+                let &participant = if let Ok(x) = worker_ball_query.get(a) {
+                    x
+                } else if let Ok(x) = worker_ball_query.get(b) {
+                    x
+                } else {
+                    continue;
+                };
+                event_writer.send(TriggerEvent {
+                    participant,
+                    trigger_type,
+                });
+            }
+            CollisionEvent::Stopped(_, _, _) => (),
+        }
+    }
+}
+fn print_trigger_events(mut events: EventReader<TriggerEvent>) {
+    for event in events.read() {
+        println!("{:#?}", event);
+    }
+}
+fn ball_reset(
+    mut collision_events: EventReader<CollisionEvent>,
+    rapier: Res<RapierContext>,
+    trigger_zone_query: Query<(), With<TriggerType>>,
+    mut worker_ball_query: Query<(&mut Transform, &mut Velocity, &Collider), With<WorkerBall>>,
+) {
+    for collision_event in collision_events.read() {
+        match collision_event {
+            CollisionEvent::Started(_, _, _) => (),
+            &CollisionEvent::Stopped(a, b, _) => {
+                let ball_entity = if trigger_zone_query.get(a).is_ok() {
+                    b
+                } else if trigger_zone_query.get(b).is_ok() {
+                    a
+                } else {
+                    continue;
+                };
+                let Ok((mut ball_transform, mut velocity, collider)) =
+                    worker_ball_query.get_mut(ball_entity)
+                else {
+                    continue;
+                };
+
+                let x = {
+                    let mut rng = thread_rng();
+                    let dist = Uniform::new(-ARENA_WIDTH_FRAC_2, ARENA_WIDTH_FRAC_2);
+                    let mut x;
+                    loop {
+                        x = rng.sample(dist);
+                        if rapier
+                            .intersection_with_shape(
+                                Vect::new(x, WORKER_BALL_SPAWN_Y),
+                                0.0,
+                                collider,
+                                QueryFilter::default(),
+                            )
+                            .is_none()
+                        {
+                            break;
+                        }
+                    }
+                    x
+                };
+
+                ball_transform.translation.x = x;
+                ball_transform.translation.y = WORKER_BALL_SPAWN_Y;
+                *velocity = Velocity::zero();
+            }
+        }
     }
 }
