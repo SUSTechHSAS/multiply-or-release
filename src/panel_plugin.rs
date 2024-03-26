@@ -36,7 +36,8 @@ const CIRCLE_GRID_VERTICAL_OFFSET: f32 = 0.0;
 const CIRCLE_GRID_VERTICAL_COUNT: usize = 6;
 const CIRCLE_GRID_VERTICAL_GAP: f32 = 10.0;
 const CIRCLE_GRID_HORIZONTAL_GAP: f32 = 25.0;
-const CIRCLE_GRID_HORIZONTAL_HALF_COUNT: usize = 2;
+const CIRCLE_GRID_HORIZONTAL_HALF_COUNT_EVEN_ROW: usize = 3;
+const CIRCLE_GRID_HORIZONTAL_HALF_COUNT_ODD_ROW: usize = 3;
 
 const WORKER_BALL_RADIUS: f32 = 5.0;
 const WORKER_BALL_SPAWN_Y: f32 = 250.0;
@@ -308,7 +309,7 @@ fn setup(
                 if i % 2 == 0 {
                     parent.spawn(circle_builder.clone().xy(0.0, y).buildtmb());
 
-                    for j in 1..=CIRCLE_GRID_HORIZONTAL_HALF_COUNT {
+                    for j in 1..=CIRCLE_GRID_HORIZONTAL_HALF_COUNT_EVEN_ROW {
                         let x = j as f32 * (CIRCLE_DIAMETER + CIRCLE_GRID_HORIZONTAL_GAP);
                         parent.spawn(circle_builder.clone().xy(x, y).buildtmb());
                         parent.spawn(circle_builder.clone().xy(-x, y).buildtmb());
@@ -317,7 +318,7 @@ fn setup(
                     let x0 = CIRCLE_HALF_GAP + CIRCLE_RADIUS;
                     parent.spawn(circle_builder.clone().xy(x0, y).buildtmb());
                     parent.spawn(circle_builder.clone().xy(-x0, y).buildtmb());
-                    for j in 1..=CIRCLE_GRID_HORIZONTAL_HALF_COUNT {
+                    for j in 1..CIRCLE_GRID_HORIZONTAL_HALF_COUNT_ODD_ROW {
                         let x = j as f32 * (CIRCLE_DIAMETER + CIRCLE_GRID_HORIZONTAL_GAP) + x0;
                         parent.spawn(circle_builder.clone().xy(x, y).buildtmb());
                         parent.spawn(circle_builder.clone().xy(-x, y).buildtmb());
