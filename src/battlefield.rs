@@ -126,6 +126,10 @@ impl Charge {
         self.value *= 2.0;
         self.level += 1.0;
     }
+    fn reset(&mut self) {
+        self.value = 1.0;
+        self.level = 1.0;
+    }
 }
 #[derive(Bundle)]
 struct ChargeBallBundle {
@@ -477,6 +481,7 @@ fn handle_trigger_events(
                     ))
                     .set_parent(root.single())
                     .add_child(ball);
+                charge.reset();
             }
         }
     }
