@@ -294,7 +294,7 @@ fn setup(
                     let x0 = CIRCLE_HALF_GAP + CIRCLE_RADIUS;
                     parent.spawn(circle_builder.clone().xy(x0, y).buildtmb());
                     parent.spawn(circle_builder.clone().xy(-x0, y).buildtmb());
-                    for j in 1..i - 1 {
+                    for j in 1..(i / 2) + 1 {
                         let x = j as f32 * (CIRCLE_DIAMETER + CIRCLE_PYRAMID_HORIZONTAL_GAP) + x0;
                         parent.spawn(circle_builder.clone().xy(x, y).buildtmb());
                         parent.spawn(circle_builder.clone().xy(-x, y).buildtmb());
