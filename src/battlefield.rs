@@ -1,12 +1,8 @@
-#![allow(clippy::type_complexity)]
+#![allow(clippy::type_complexity, clippy::too_many_arguments)]
 
 use std::f32::consts::{FRAC_PI_2, PI};
 
-use bevy::{
-    prelude::*,
-    sprite::{MaterialMesh2dBundle, Mesh2dHandle},
-    time::Stopwatch,
-};
+use bevy::{prelude::*, sprite::Mesh2dHandle, time::Stopwatch};
 use bevy_rapier2d::prelude::*;
 
 use crate::{
@@ -30,6 +26,8 @@ const TURRET_ROTATION_SPEED: f32 = 1.0;
 const BULLET_TEXT_COLOR: Color = Color::BLACK;
 const BULLET_TEXT_FONT_SIZE_ASPECT: f32 = 0.5;
 const BULLET_RADIUS_FACTOR: f32 = 5.0;
+const BULLET_FIRE_FORCE: f32 = 100.0;
+const BULLET_MASS_FACTOR: f32 = 1.0;
 
 // Z-index
 const TILE_Z: f32 = 10.0;
@@ -45,21 +43,22 @@ const TURRET_PLATFORM_Z: f32 = -1.0;
 pub struct BattlefieldPlugin;
 impl Plugin for BattlefieldPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(Startup, setup)
-            .add_systems(
-                Update,
-                (
-                    rotate_turret,
-                    update_charge_text,
-                    update_charge_ball,
-                    handle_trigger_events,
-                ),
-            )
-            .insert_resource(AutoTimer::default())
-            .add_systems(Update, auto_multiply);
+        app.add_systems(Startup, setup).add_systems(
+            Update,
+            (
+                rotate_turret,
+                update_charge_text,
+                update_charge_ball,
+                handle_trigger_events,
+            ),
+        );
+        // .insert_resource(AutoTimer::default())
+        // .add_systems(Update, auto_multiply);
     }
 }
 
+#[derive(Component)]
+struct BattlefieldRoot;
 /// Marker to mark this entity as a tile.
 #[derive(Component, Clone, Copy)]
 struct Tile;
@@ -68,7 +67,7 @@ struct Tile;
 struct TileBundle {
     /// Markers to mark this entity as a tile, a sensor collider, and a trigger for collision
     /// events.
-    markers: (Tile, Sensor, ActiveEvents),
+    markers: (Tile, Sensor),
     /// Bevy rendering component used to display the tile.
     sprite_bundle: SpriteBundle,
     /// Rapier collider component. We'll mark this as sensor and won't add a rigidbody to this
@@ -80,7 +79,7 @@ struct TileBundle {
 impl TileBundle {
     fn new(owner: Participant, color: Color, x: f32, y: f32) -> Self {
         Self {
-            markers: (Tile, Sensor, ActiveEvents::COLLISION_EVENTS),
+            markers: (Tile, Sensor),
             sprite_bundle: SpriteBundle {
                 transform: Transform {
                     translation: Vec3::new(x, y, TILE_Z),
@@ -104,21 +103,106 @@ impl TurretStopwatch {
 }
 #[derive(Component, Clone, Copy)]
 struct Charge {
-    value: usize,
+    value: f32,
     level: f32,
     link: Entity,
 }
-impl Charge {
-    fn new(link: Entity) -> Self {
+impl From<Entity> for Charge {
+    fn from(link: Entity) -> Self {
         Self {
-            value: 1,
+            value: 1.0,
             level: 1.0,
             link,
         }
     }
+}
+impl Charge {
+    fn new(value: f32, level: f32, link: Entity) -> Self {
+        Self { value, level, link }
+    }
     fn multiply(&mut self) {
-        self.value *= 2;
+        self.value *= 2.0;
         self.level += 1.0;
+    }
+}
+#[derive(Bundle)]
+struct ChargeBallBundle {
+    matmesh: ColorMesh2dBundle,
+}
+impl ChargeBallBundle {
+    fn new(mesh: Mesh2dHandle, material: Handle<ColorMaterial>) -> Self {
+        Self {
+            matmesh: ColorMesh2dBundle {
+                transform: Transform::from_xyz(0.0, 0.0, BULLET_BALL_Z),
+                mesh,
+                material,
+                ..default()
+            },
+        }
+    }
+}
+#[derive(Resource)]
+struct BulletMesh(Mesh2dHandle);
+#[derive(Component)]
+struct Bullet;
+/// Component bundle for the bullets that the turrets fire.
+#[derive(Bundle)]
+struct BulletBundle {
+    /// Marker to mark this entity as a bullet.
+    markers: (Bullet, GravityScale, Restitution, LockedAxes, ActiveEvents),
+    charge: Charge,
+    /// Rapier collider component.
+    collider: Collider,
+    /// Rapier rigidbody component, used by the physics engine to move the entity.
+    rigidbody: RigidBody,
+    mass: ColliderMassProperties,
+    impulse: ExternalImpulse,
+    /// The game participant that owns this bullet.
+    owner: Participant,
+    text_bundle: Text2dBundle,
+}
+impl BulletBundle {
+    fn new(
+        owner: Participant,
+        x: f32,
+        y: f32,
+        ball: Entity,
+        charge: &Charge,
+        firing_angle: f32,
+    ) -> Self {
+        Self {
+            owner,
+            charge: Charge::new(charge.value, charge.level, ball),
+            markers: (
+                Bullet,
+                GravityScale(0.0),
+                Restitution {
+                    coefficient: 1.0,
+                    combine_rule: CoefficientCombineRule::Max,
+                },
+                LockedAxes::ROTATION_LOCKED,
+                ActiveEvents::COLLISION_EVENTS,
+            ),
+            collider: Collider::ball(1.0),
+            rigidbody: RigidBody::Dynamic,
+            mass: ColliderMassProperties::Mass(charge.value * BULLET_MASS_FACTOR),
+            impulse: ExternalImpulse {
+                impulse: Vec2::from_angle(firing_angle) * BULLET_FIRE_FORCE,
+                torque_impulse: 0.0,
+            },
+            text_bundle: Text2dBundle {
+                transform: Transform::from_xyz(x, y, BULLET_TEXT_Z),
+                text: Text::from_section(
+                    "",
+                    TextStyle {
+                        font: Default::default(),
+                        font_size: BULLET_RADIUS_FACTOR,
+                        color: BULLET_TEXT_COLOR,
+                    },
+                ),
+                ..default()
+            },
+        }
     }
 }
 #[derive(Component, Default)]
@@ -137,7 +221,7 @@ impl TurretBundle {
         Self {
             marker: (Turret, Sensor),
             owner,
-            charge: Charge::new(ball),
+            charge: Charge::from(ball),
             platform: TurretPlatformLink(platform),
             collider: Collider::ball(1.0),
             text_bundle: Text2dBundle {
@@ -222,6 +306,7 @@ fn setup(
     let root = commands
         .spawn((
             Name::new("Battlefield Root"),
+            BattlefieldRoot,
             SpriteBundle {
                 sprite: Sprite {
                     color: TILE_BORDER_COLOR,
@@ -258,12 +343,10 @@ fn setup(
     let mesh = Mesh2dHandle(meshes.add(Circle::new(1.0)));
     let mut spawn_turret = |owner: Participant, base_offset: f32, x: f32, y: f32| {
         let ball = commands
-            .spawn(MaterialMesh2dBundle {
-                transform: Transform::from_xyz(0.0, 0.0, BULLET_BALL_Z),
-                mesh: mesh.clone(),
-                material: materials.get(owner).clone(),
-                ..default()
-            })
+            .spawn(ChargeBallBundle::new(
+                mesh.clone(),
+                materials.get(owner).clone(),
+            ))
             .id();
         let platform = commands
             .spawn(TurretPlatformBundle::new(base_offset))
@@ -286,6 +369,7 @@ fn setup(
     let c = spawn_turret(Participant::C, FRAC_PI_2, TURRET_POSITION, -TURRET_POSITION);
     let d = spawn_turret(Participant::D, 0.0, -TURRET_POSITION, -TURRET_POSITION);
     commands.insert_resource(ParticipantMap::new(a, b, c, d));
+    commands.insert_resource(BulletMesh(mesh));
 }
 fn rotate_turret(
     time: Res<Time>,
@@ -327,33 +411,57 @@ fn update_charge_ball(
     }
 }
 fn handle_trigger_events(
+    mut commands: Commands,
     mut reader: EventReader<TriggerEvent>,
     participants: Res<ParticipantMap<Entity>>,
-    mut turret_query: Query<&mut Charge, With<Turret>>,
+    mesh: Res<BulletMesh>,
+    materials: Res<ParticipantMap<Handle<ColorMaterial>>>,
+    turret_stopwatch: Res<TurretStopwatch>,
+    mut turret_query: Query<(&mut Charge, &Transform, &TurretPlatformLink), With<Turret>>,
+    platform_query: Query<&BarrelOffset>,
+    root: Query<Entity, With<BattlefieldRoot>>,
 ) {
     for event in reader.read() {
+        let &entity = participants.get(event.participant);
+        let (mut charge, transform, &TurretPlatformLink(link)) =
+            turret_query.get_mut(entity).unwrap();
         match event.trigger_type {
-            TriggerType::Multiply => {
-                let &entity = participants.get(event.participant);
-                let mut charge = turret_query.get_mut(entity).unwrap();
-                charge.multiply()
-            }
+            TriggerType::Multiply => charge.multiply(),
             TriggerType::BurstShot => {
                 dbg!("Not implemented");
             }
             TriggerType::ChargedShot => {
-                dbg!("Not implemented");
+                let &BarrelOffset(base_angle) = platform_query.get(link).unwrap();
+                let ball = commands
+                    .spawn(ChargeBallBundle::new(
+                        mesh.0.clone(),
+                        materials.get(event.participant).clone(),
+                    ))
+                    .id();
+                commands
+                    .spawn(BulletBundle::new(
+                        event.participant,
+                        transform.translation.x,
+                        transform.translation.y,
+                        ball,
+                        &charge,
+                        turret_stopwatch.get() + base_angle,
+                    ))
+                    .set_parent(root.single())
+                    .add_child(ball);
             }
         }
     }
 }
 #[derive(Resource)]
+#[allow(dead_code)]
 struct AutoTimer(Timer);
 impl Default for AutoTimer {
     fn default() -> Self {
         Self(Timer::from_seconds(1.0, TimerMode::Repeating))
     }
 }
+#[allow(dead_code)]
 fn auto_multiply(
     mut writer: EventWriter<TriggerEvent>,
     mut timer: ResMut<AutoTimer>,

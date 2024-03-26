@@ -1,8 +1,5 @@
 use battlefield::BattlefieldPlugin;
-use bevy::{
-    prelude::*,
-    sprite::{Material2d, MaterialMesh2dBundle},
-};
+use bevy::prelude::*;
 use bevy_inspector_egui::quick::WorldInspectorPlugin;
 use bevy_rapier2d::prelude::*;
 use panel_plugin::PanelPlugin;
@@ -34,24 +31,4 @@ fn main() {
 
 fn setup(mut commands: Commands) {
     commands.spawn((Name::new("Camera"), Camera2dBundle::default()));
-}
-
-#[derive(Component)]
-struct Bullet;
-#[derive(Bundle)]
-/// Component bundle for the bullets that the turrets fire.
-struct BulletBundle<M: Material2d> {
-    /// Marker to mark this entity as a bullet.
-    marker: Bullet,
-    /// Bevy rendering component used to display the bullet.
-    mesh: MaterialMesh2dBundle<M>,
-    /// Rapier collider component.
-    collider: Collider,
-    /// Rapier rigidbody component, used by the physics engine to move the entity.
-    rigidbody: RigidBody,
-    /// The game participant that owns this bullet.
-    owner: Participant,
-    /// Some text component for bevy to render the text onto the ball
-    /// (We're not sure exact how this would be done at the moment).
-    _text: (),
 }
