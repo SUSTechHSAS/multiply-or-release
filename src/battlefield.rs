@@ -536,6 +536,9 @@ fn handle_bullet_tile_collision(
                 if bullet_owner == *tile_owner {
                     continue;
                 }
+                if charge.value <= 0.0 {
+                    continue;
+                }
                 *tile_owner = bullet_owner;
                 charge.value -= 1.0;
             }
