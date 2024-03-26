@@ -13,11 +13,13 @@ use crate::{utils::ParticipantInfo, Participant};
 
 // Configurable
 
+const ROOT_X_OFFSET: f32 = -500.0;
+
 const WALL_THICKNESS: f32 = 10.0;
 const WALL_COLOR: Color = Color::rgb(0.8, 0.8, 0.8);
 const ARENA_COLOR: Color = Color::DARK_GRAY;
-const ARENA_HEIGHT: f32 = 600.0;
-const ARENA_WIDTH: f32 = 200.0;
+const ARENA_HEIGHT: f32 = 700.0;
+const ARENA_WIDTH: f32 = 260.0;
 
 const TRIGGER_ZONE_Y: f32 = -250.0;
 const TRIGGER_ZONE_HEIGHT: f32 = 40.0;
@@ -27,21 +29,21 @@ const CHARGED_SHOT_ZONE_COLOR: Color = Color::RED;
 
 const CIRCLE_RADIUS: f32 = 10.0;
 const CIRCLE_COLOR: Color = Color::rgb(0.8, 0.8, 0.8);
-const CIRCLE_PYRAMID_VERTICAL_OFFSET: f32 = 200.0;
-const CIRCLE_PYRAMID_VERTICAL_COUNT: usize = 4;
-const CIRCLE_PYRAMID_VERTICAL_GAP: f32 = 10.0;
-const CIRCLE_PYRAMID_HORIZONTAL_GAP: f32 = 25.0;
+const CIRCLE_PYRAMID_VERTICAL_OFFSET: f32 = 250.0;
+const CIRCLE_PYRAMID_VERTICAL_COUNT: usize = 5;
+const CIRCLE_PYRAMID_VERTICAL_GAP: f32 = 8.0;
+const CIRCLE_PYRAMID_HORIZONTAL_GAP: f32 = 40.0;
 
-const CIRCLE_GRID_VERTICAL_OFFSET: f32 = 0.0;
-const CIRCLE_GRID_VERTICAL_COUNT: usize = 6;
-const CIRCLE_GRID_VERTICAL_GAP: f32 = 10.0;
-const CIRCLE_GRID_HORIZONTAL_GAP: f32 = 25.0;
-const CIRCLE_GRID_HORIZONTAL_HALF_COUNT_EVEN_ROW: usize = 3;
+const CIRCLE_GRID_VERTICAL_OFFSET: f32 = 70.0;
+const CIRCLE_GRID_VERTICAL_COUNT: usize = 8;
+const CIRCLE_GRID_VERTICAL_GAP: f32 = 15.0;
+const CIRCLE_GRID_HORIZONTAL_GAP: f32 = 27.0;
+const CIRCLE_GRID_HORIZONTAL_HALF_COUNT_EVEN_ROW: usize = 2;
 const CIRCLE_GRID_HORIZONTAL_HALF_COUNT_ODD_ROW: usize = 3;
 
 const WORKER_BALL_RADIUS: f32 = 5.0;
-const WORKER_BALL_SPAWN_Y: f32 = 250.0;
-const WORKER_BALL_RESTITUTION_COEFFICIENT: f32 = 1.0;
+const WORKER_BALL_SPAWN_Y: f32 = 320.0;
+const WORKER_BALL_RESTITUTION_COEFFICIENT: f32 = 0.75;
 const WORKER_BALL_SPAWN_TIMER_SECS: f32 = 10.0;
 const WORKER_BALL_COUNT_MAX: usize = 5;
 
@@ -260,7 +262,7 @@ fn setup(
         .spawn((
             Name::new("PanelRoot"),
             PanelRoot,
-            SpatialBundle::default(),
+            SpatialBundle::from_transform(Transform::from_xyz(ROOT_X_OFFSET, 0.0, 0.0)),
             RigidBody::Fixed,
             Collider::polyline(
                 vec![
