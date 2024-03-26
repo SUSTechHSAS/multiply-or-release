@@ -7,7 +7,7 @@ use bevy::{
 use bevy_rapier2d::prelude::*;
 use rand::{distributions::Uniform, thread_rng, Rng};
 
-use crate::{utils::ParticipantInfo, Participant};
+use crate::{utils::ParticipantMap, Participant};
 
 // Constants {{{
 
@@ -385,8 +385,7 @@ fn spawn_workers(
     mut spawner: ResMut<WorkerBallSpawner>,
     time: Res<Time>,
     rapier: Res<RapierContext>,
-    participant_info: Res<ParticipantInfo>,
-    root: Query<Entity, With<PanelRoot>>,
+    colors: Res<ParticipantMap<Handle<ColorMaterial>>>,
     root: Query<(Entity, &GlobalTransform), With<PanelRoot>>,
 ) {
     if spawner.timer.just_finished() {
@@ -446,7 +445,7 @@ fn spawn_workers(
                 Participant::A,
                 x0,
                 spawner.mesh.clone(),
-                participant_info.colors.a.clone(),
+                colors.a.clone(),
             ))
             .set_parent(root_entity);
         commands
@@ -454,7 +453,7 @@ fn spawn_workers(
                 Participant::B,
                 x1,
                 spawner.mesh.clone(),
-                participant_info.colors.b.clone(),
+                colors.b.clone(),
             ))
             .set_parent(root_entity);
         commands
@@ -462,7 +461,7 @@ fn spawn_workers(
                 Participant::C,
                 x2,
                 spawner.mesh.clone(),
-                participant_info.colors.c.clone(),
+                colors.c.clone(),
             ))
             .set_parent(root_entity);
         commands
@@ -470,7 +469,7 @@ fn spawn_workers(
                 Participant::D,
                 x3,
                 spawner.mesh.clone(),
-                participant_info.colors.d.clone(),
+                colors.d.clone(),
             ))
             .set_parent(root_entity);
         spawner.counter += 1;

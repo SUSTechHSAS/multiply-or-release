@@ -1,4 +1,4 @@
-
+use battlefield::BattlefieldPlugin;
 use bevy::{
     prelude::*,
     sprite::{Material2d, MaterialMesh2dBundle},
@@ -8,6 +8,7 @@ use bevy_rapier2d::prelude::*;
 use panel_plugin::PanelPlugin;
 use utils::{Participant, UtilsPlugin};
 
+mod battlefield;
 mod panel_plugin;
 mod utils;
 
@@ -24,32 +25,15 @@ fn main() {
     App::new()
         .add_plugins(DefaultPlugins.set(window_plugin))
         .add_plugins(RapierPhysicsPlugin::<NoUserData>::default())
-        .add_plugins(RapierDebugRenderPlugin::default())
+        // .add_plugins(RapierDebugRenderPlugin::default())
         .add_plugins(WorldInspectorPlugin::new())
-        .add_plugins((UtilsPlugin, PanelPlugin))
+        .add_plugins((UtilsPlugin, PanelPlugin, BattlefieldPlugin))
         .add_systems(Startup, setup)
         .run();
 }
 
 fn setup(mut commands: Commands) {
     commands.spawn((Name::new("Camera"), Camera2dBundle::default()));
-}
-
-#[derive(Component)]
-/// Marker to mark this entity as a tile.
-struct Tile;
-#[derive(Bundle)]
-/// Component bundle for each of the individual tiles on the battle field.
-struct TileBundle<M: Material2d> {
-    /// Marker to mark this entity as a tile.
-    marker: Tile,
-    /// Bevy rendering component used to display the tile.
-    mesh: MaterialMesh2dBundle<M>,
-    /// Rapier collider component. We'll mark this as sensor and won't add a rigidbody to this
-    /// entity because we don't actually want the physics engine to move itl.
-    collider: Collider,
-    /// The game participant that owns this tile.
-    owner: Participant,
 }
 
 #[derive(Component)]

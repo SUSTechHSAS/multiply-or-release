@@ -14,13 +14,8 @@ impl Plugin for UtilsPlugin {
     }
 }
 
-#[derive(Resource)]
-pub struct ParticipantInfo {
-    pub colors: ParticipantMap<Handle<ColorMaterial>>,
-}
-
 /// A struct that maps a value to each participant.
-#[derive(Debug, Clone, Copy, Default)]
+#[derive(Debug, Clone, Copy, Default, Resource)]
 pub struct ParticipantMap<T> {
     // {{{
     pub a: T,
@@ -28,6 +23,7 @@ pub struct ParticipantMap<T> {
     pub c: T,
     pub d: T,
 }
+#[allow(dead_code)]
 impl<T> ParticipantMap<T> {
     pub const fn new(a: T, b: T, c: T, d: T) -> Self {
         Self { a, b, c, d }
@@ -65,7 +61,6 @@ pub enum Participant {
 }
 
 fn setup(mut commands: Commands, mut materials: ResMut<Assets<ColorMaterial>>) {
-    commands.insert_resource(ParticipantInfo {
-        colors: PARTICIPANT_COLORS.map(|color| materials.add(color)),
-    });
+    commands.insert_resource(PARTICIPANT_COLORS);
+    commands.insert_resource(PARTICIPANT_COLORS.map(|color| materials.add(color)));
 }
