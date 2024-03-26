@@ -17,6 +17,8 @@ const TILE_BORDER_THICNESS: f32 = 1.0;
 const TILE_COUNT: usize = 40;
 const TILE_DIMENSION: f32 = 8.0;
 
+const BATTLEFIELD_BOUNDARY: f32 = TILE_COUNT as f32 * (TILE_DIMENSION + TILE_BORDER_THICNESS);
+
 const TURRET_POSITION: f32 = 350.0;
 const TURRET_HEAD_COLOR: Color = Color::DARK_GRAY;
 const TURRET_HEAD_THICNESS: f32 = 2.5;
@@ -322,6 +324,17 @@ fn setup(
         .spawn((
             Name::new("Battlefield Root"),
             BattlefieldRoot,
+            RigidBody::Fixed,
+            Collider::polyline(
+                vec![
+                    Vect::new(BATTLEFIELD_BOUNDARY, BATTLEFIELD_BOUNDARY),
+                    Vect::new(-BATTLEFIELD_BOUNDARY, BATTLEFIELD_BOUNDARY),
+                    Vect::new(-BATTLEFIELD_BOUNDARY, -BATTLEFIELD_BOUNDARY),
+                    Vect::new(BATTLEFIELD_BOUNDARY, -BATTLEFIELD_BOUNDARY),
+                    Vect::new(BATTLEFIELD_BOUNDARY, BATTLEFIELD_BOUNDARY),
+                ],
+                None,
+            ),
             SpriteBundle {
                 sprite: Sprite {
                     color: TILE_BORDER_COLOR,
