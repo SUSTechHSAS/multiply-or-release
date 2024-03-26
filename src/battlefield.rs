@@ -149,10 +149,18 @@ struct Bullet;
 #[derive(Bundle)]
 struct BulletBundle {
     /// Marker to mark this entity as a bullet.
-    markers: (Bullet, GravityScale, Restitution, LockedAxes, ActiveEvents),
+    markers: (
+        Bullet,
+        GravityScale,
+        Friction,
+        Restitution,
+        LockedAxes,
+        ActiveEvents,
+    ),
     charge: Charge,
     /// Rapier collider component.
     collider: Collider,
+    collider_scale: ColliderScale,
     /// Rapier rigidbody component, used by the physics engine to move the entity.
     rigidbody: RigidBody,
     mass: ColliderMassProperties,
@@ -176,6 +184,10 @@ impl BulletBundle {
             markers: (
                 Bullet,
                 GravityScale(0.0),
+                Friction {
+                    coefficient: 0.0,
+                    combine_rule: CoefficientCombineRule::Min,
+                },
                 Restitution {
                     coefficient: 1.0,
                     combine_rule: CoefficientCombineRule::Max,
@@ -184,8 +196,9 @@ impl BulletBundle {
                 ActiveEvents::COLLISION_EVENTS,
             ),
             collider: Collider::ball(1.0),
+            collider_scale: ColliderScale::Absolute(Vect::splat(1.0)),
             rigidbody: RigidBody::Dynamic,
-            mass: ColliderMassProperties::Mass(charge.value * BULLET_MASS_FACTOR),
+            mass: ColliderMassProperties::Mass(charge.level * BULLET_MASS_FACTOR),
             impulse: ExternalImpulse {
                 impulse: Vec2::from_angle(firing_angle) * BULLET_FIRE_FORCE,
                 torque_impulse: 0.0,
@@ -215,6 +228,7 @@ struct TurretBundle {
     text_bundle: Text2dBundle,
     owner: Participant,
     collider: Collider,
+    collider_scale: ColliderScale,
 }
 impl TurretBundle {
     fn new(owner: Participant, x: f32, y: f32, ball: Entity, platform: Entity) -> Self {
@@ -224,6 +238,7 @@ impl TurretBundle {
             charge: Charge::from(ball),
             platform: TurretPlatformLink(platform),
             collider: Collider::ball(1.0),
+            collider_scale: ColliderScale::Absolute(Vect::splat(1.0)),
             text_bundle: Text2dBundle {
                 transform: Transform::from_xyz(x, y, BULLET_TEXT_Z),
                 text: Text::from_section(
@@ -399,12 +414,12 @@ fn update_charge_text(
     }
 }
 fn update_charge_ball(
-    mut turrets: Query<(&mut Collider, &Charge), Or<(Changed<Charge>, Added<Charge>)>>,
+    mut turrets: Query<(&mut ColliderScale, &Charge), Or<(Changed<Charge>, Added<Charge>)>>,
     mut transform_query: Query<&mut Transform>,
 ) {
-    for (mut collider, charge) in &mut turrets {
+    for (mut collider_scale, charge) in &mut turrets {
         let scale = charge.level * BULLET_RADIUS_FACTOR;
-        collider.set_scale(Vec2::splat(scale), 1);
+        *collider_scale = ColliderScale::Absolute(Vect::splat(scale));
         let mut ball_transform = transform_query.get_mut(charge.link).unwrap();
         ball_transform.scale.x = scale;
         ball_transform.scale.y = scale;
