@@ -49,9 +49,12 @@ impl Plugin for BattlefieldPlugin {
             Update,
             (
                 rotate_turret,
-                update_charge_text,
-                update_charge_ball,
+                handle_bullet_tile_collision,
+                update_charge_level.after(handle_bullet_tile_collision),
+                update_charge_text.after(update_charge_level),
+                update_charge_ball.after(update_charge_level),
                 handle_trigger_events,
+                update_tile_color.after(handle_bullet_tile_collision),
             ),
         );
         // .insert_resource(AutoTimer::default())
@@ -414,6 +417,20 @@ fn rotate_turret(
         *transform = transform.with_rotation(Quat::from_rotation_z(base_offset - angle_offset));
     }
 }
+fn update_charge_level(
+    mut commands: Commands,
+    mut query: Query<(Entity, &mut Charge), Changed<Charge>>,
+) {
+    for (entity, mut charge) in &mut query {
+        while 2f32.powf(charge.level - 1.0) > charge.value {
+            charge.level -= 1.0;
+            if charge.level < 1.0 {
+                commands.entity(entity).despawn_recursive();
+                break;
+            }
+        }
+    }
+}
 fn update_charge_text(
     mut query: Query<(&mut Text, &Charge), Or<(Changed<Charge>, Added<Charge>)>>,
 ) {
@@ -460,7 +477,7 @@ fn handle_trigger_events(
         match event.trigger_type {
             TriggerType::Multiply => charge.multiply(),
             TriggerType::BurstShot => {
-                dbg!("Not implemented");
+                println!("burst shot is not implemented yet");
             }
             TriggerType::ChargedShot => {
                 let &BarrelOffset(base_angle) = platform_query.get(link).unwrap();
@@ -483,6 +500,46 @@ fn handle_trigger_events(
                     .add_child(ball);
                 charge.reset();
             }
+        }
+    }
+}
+fn update_tile_color(
+    colors: Res<ParticipantMap<Color>>,
+    mut tiles: Query<(&Participant, &mut Sprite), (With<Tile>, Changed<Participant>)>,
+) {
+    for (&owner, mut sprite) in &mut tiles {
+        sprite.color = *colors.get(owner);
+    }
+}
+fn handle_bullet_tile_collision(
+    mut events: EventReader<CollisionEvent>,
+    mut bullet_query: Query<(&Participant, &mut Charge), With<Bullet>>,
+    mut tile_query: Query<&mut Participant, (With<Tile>, Without<Bullet>)>,
+) {
+    for event in events.read() {
+        match event {
+            &CollisionEvent::Started(a, b, _) => {
+                let (&bullet_owner, mut charge) = if let Ok(x) = bullet_query.get_mut(a) {
+                    x
+                } else if let Ok(x) = bullet_query.get_mut(b) {
+                    x
+                } else {
+                    continue;
+                };
+                let mut tile_owner = if let Ok(x) = tile_query.get_mut(a) {
+                    x
+                } else if let Ok(x) = tile_query.get_mut(b) {
+                    x
+                } else {
+                    continue;
+                };
+                if bullet_owner == *tile_owner {
+                    continue;
+                }
+                *tile_owner = bullet_owner;
+                charge.value -= 1.0;
+            }
+            CollisionEvent::Stopped(_, _, _) => (),
         }
     }
 }
