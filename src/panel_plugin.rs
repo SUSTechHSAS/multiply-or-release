@@ -75,7 +75,7 @@ impl Plugin for PanelPlugin {
         app.add_event::<TriggerEvent>()
             .add_systems(Startup, setup)
             .add_systems(Update, spawn_workers.run_if(spawn_workers_condition))
-            .add_systems(Update, (trigger_event, print_trigger_events, ball_reset));
+            .add_systems(Update, (trigger_event, ball_reset));
     }
 }
 
@@ -508,6 +508,7 @@ fn trigger_event(
         }
     }
 }
+#[allow(dead_code)]
 fn print_trigger_events(mut events: EventReader<TriggerEvent>) {
     for event in events.read() {
         println!("{:#?}", event);
