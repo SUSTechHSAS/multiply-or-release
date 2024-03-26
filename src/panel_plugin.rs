@@ -387,24 +387,34 @@ fn spawn_workers(
     rapier: Res<RapierContext>,
     participant_info: Res<ParticipantInfo>,
     root: Query<Entity, With<PanelRoot>>,
+    root: Query<(Entity, &GlobalTransform), With<PanelRoot>>,
 ) {
     if spawner.timer.just_finished() {
+        let (root_entity, root_transform) = root.single();
+        let Vec3 {
+            x: root_x,
+            y: root_y,
+            z: _,
+        } = root_transform.translation();
         let collider = Collider::ball(WORKER_BALL_RADIUS);
         let mut rng = thread_rng();
         let dist = Uniform::new(-ARENA_WIDTH_FRAC_2, ARENA_WIDTH_FRAC_2);
-        let mut f = || loop {
-            let x = rng.sample(dist);
-            if rapier
-                .intersection_with_shape(
-                    Vect::new(x, WORKER_BALL_SPAWN_Y),
-                    0.0,
-                    &collider,
-                    QueryFilter::default(),
-                )
-                .is_none()
-            {
-                return x;
+        let mut f = || {
+            for _ in 0..50 {
+                let x = rng.sample(dist);
+                if rapier
+                    .intersection_with_shape(
+                        Vect::new(x + root_x, WORKER_BALL_SPAWN_Y + root_y),
+                        0.0,
+                        &collider,
+                        QueryFilter::default(),
+                    )
+                    .is_none()
+                {
+                    return x;
+                }
             }
+            panic!("failed to find a suitable location to spawn ball.");
         };
         fn too_close(a: f32, b: f32) -> bool {
             (a - b).abs() <= WORKER_BALL_DIAMETER
@@ -431,7 +441,6 @@ fn spawn_workers(
             }
             x3
         };
-        let root = root.single();
         commands
             .spawn(WorkerBallBundle::new(
                 Participant::A,
@@ -439,7 +448,7 @@ fn spawn_workers(
                 spawner.mesh.clone(),
                 participant_info.colors.a.clone(),
             ))
-            .set_parent(root);
+            .set_parent(root_entity);
         commands
             .spawn(WorkerBallBundle::new(
                 Participant::B,
@@ -447,7 +456,7 @@ fn spawn_workers(
                 spawner.mesh.clone(),
                 participant_info.colors.b.clone(),
             ))
-            .set_parent(root);
+            .set_parent(root_entity);
         commands
             .spawn(WorkerBallBundle::new(
                 Participant::C,
@@ -455,7 +464,7 @@ fn spawn_workers(
                 spawner.mesh.clone(),
                 participant_info.colors.c.clone(),
             ))
-            .set_parent(root);
+            .set_parent(root_entity);
         commands
             .spawn(WorkerBallBundle::new(
                 Participant::D,
@@ -463,7 +472,7 @@ fn spawn_workers(
                 spawner.mesh.clone(),
                 participant_info.colors.d.clone(),
             ))
-            .set_parent(root);
+            .set_parent(root_entity);
         spawner.counter += 1;
     }
     spawner.timer.tick(time.delta());
@@ -508,6 +517,7 @@ fn print_trigger_events(mut events: EventReader<TriggerEvent>) {
 fn ball_reset(
     mut collision_events: EventReader<CollisionEvent>,
     rapier: Res<RapierContext>,
+    root: Query<&GlobalTransform, With<PanelRoot>>,
     trigger_zone_query: Query<(), With<TriggerType>>,
     mut worker_ball_query: Query<(&mut Transform, &mut Velocity, &Collider), With<WorkerBall>>,
 ) {
@@ -529,6 +539,11 @@ fn ball_reset(
                 };
 
                 let x = {
+                    let Vec3 {
+                        x: root_x,
+                        y: root_y,
+                        z: _,
+                    } = root.single().translation();
                     let mut rng = thread_rng();
                     let dist = Uniform::new(-ARENA_WIDTH_FRAC_2, ARENA_WIDTH_FRAC_2);
                     let mut x;
@@ -536,7 +551,7 @@ fn ball_reset(
                         x = rng.sample(dist);
                         if rapier
                             .intersection_with_shape(
-                                Vect::new(x, WORKER_BALL_SPAWN_Y),
+                                Vect::new(x + root_x, WORKER_BALL_SPAWN_Y + root_y),
                                 0.0,
                                 collider,
                                 QueryFilter::default(),
