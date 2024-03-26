@@ -31,6 +31,9 @@ const BULLET_RADIUS_FACTOR: f32 = 5.0;
 const BULLET_FIRE_FORCE: f32 = 100.0;
 const BULLET_MASS_FACTOR: f32 = 1.0;
 
+const ONE_SHOT_PROTECTION_THRESHOLD: f32 = 10.0;
+const ONE_SHOT_DAMAGE_THRESHOLD: f32 = 1024.0;
+
 // Z-index
 const TILE_Z: f32 = 10.0;
 const BULLET_BALL_Z: f32 = -1.0;
@@ -49,11 +52,12 @@ impl Plugin for BattlefieldPlugin {
             Update,
             (
                 rotate_turret,
+                handle_trigger_events.after(handle_bullet_turret_collision),
                 handle_bullet_tile_collision,
-                update_charge_level.after(handle_bullet_tile_collision),
+                handle_bullet_turret_collision.after(handle_bullet_tile_collision),
+                update_charge_level.after(handle_bullet_turret_collision),
                 update_charge_text.after(update_charge_level),
                 update_charge_ball.after(update_charge_level),
-                handle_trigger_events,
                 update_tile_color.after(handle_bullet_tile_collision),
             ),
         );
@@ -170,6 +174,7 @@ struct BulletBundle {
     /// Rapier collider component.
     collider: Collider,
     collider_scale: ColliderScale,
+    velocity: Velocity,
     /// Rapier rigidbody component, used by the physics engine to move the entity.
     rigidbody: RigidBody,
     mass: ColliderMassProperties,
@@ -206,6 +211,7 @@ impl BulletBundle {
             ),
             collider: Collider::ball(1.0),
             collider_scale: ColliderScale::Absolute(Vect::splat(1.0)),
+            velocity: Velocity::default(),
             rigidbody: RigidBody::Dynamic,
             mass: ColliderMassProperties::Mass(charge.level * BULLET_MASS_FACTOR),
             impulse: ExternalImpulse {
@@ -472,8 +478,10 @@ fn handle_trigger_events(
 ) {
     for event in reader.read() {
         let &entity = participants.get(event.participant);
-        let (mut charge, transform, &TurretPlatformLink(link)) =
-            turret_query.get_mut(entity).unwrap();
+        let Ok((mut charge, transform, &TurretPlatformLink(link))) = turret_query.get_mut(entity)
+        else {
+            continue;
+        };
         match event.trigger_type {
             TriggerType::Multiply => charge.multiply(),
             TriggerType::BurstShot => {
@@ -509,6 +517,67 @@ fn update_tile_color(
 ) {
     for (&owner, mut sprite) in &mut tiles {
         sprite.color = *colors.get(owner);
+    }
+}
+fn handle_bullet_turret_collision(
+    mut commands: Commands,
+    mut events: EventReader<CollisionEvent>,
+    mut bullet_query: Query<(Entity, &Participant, &mut Charge, &mut Velocity), With<Bullet>>,
+    mut turret_query: Query<(&Participant, &mut Charge), (With<Turret>, Without<Bullet>)>,
+    participant_entity_query: Query<(Entity, &Participant), Without<Tile>>,
+) {
+    for event in events.read() {
+        match event {
+            &CollisionEvent::Started(a, b, _) => {
+                let (bullet_entity, &bullet_owner, mut bullet_charge, mut velocity) =
+                    if let Ok(x) = bullet_query.get_mut(a) {
+                        x
+                    } else if let Ok(x) = bullet_query.get_mut(b) {
+                        x
+                    } else {
+                        continue;
+                    };
+                let (&turret_owner, mut turret_charge) = if let Ok(x) = turret_query.get_mut(a) {
+                    x
+                } else if let Ok(x) = turret_query.get_mut(b) {
+                    x
+                } else {
+                    continue;
+                };
+                if turret_owner == bullet_owner {
+                    continue;
+                }
+                if bullet_charge.value < turret_charge.value {
+                    turret_charge.value -= bullet_charge.value;
+                    commands.entity(bullet_entity).despawn_recursive();
+                } else {
+                    bullet_charge.value -= turret_charge.value;
+                    let mut kill = || {
+                        for (e, &p) in &participant_entity_query {
+                            if p == turret_owner {
+                                commands.entity(e).despawn_recursive();
+                            }
+                        }
+                    };
+                    if turret_charge.level < ONE_SHOT_PROTECTION_THRESHOLD {
+                        kill();
+                    } else if bullet_charge.value > ONE_SHOT_DAMAGE_THRESHOLD {
+                        bullet_charge.value -= ONE_SHOT_DAMAGE_THRESHOLD;
+                        if bullet_charge.value <= 0.0 {
+                            kill();
+                            commands.entity(bullet_entity).despawn_recursive();
+                        }
+                    } else {
+                        turret_charge.reset();
+                    }
+                    velocity.linvel *= -1.0;
+                }
+                let min_value = bullet_charge.value.min(turret_charge.value);
+                bullet_charge.value -= min_value;
+                turret_charge.value -= min_value;
+            }
+            CollisionEvent::Stopped(_, _, _) => (),
+        }
     }
 }
 fn handle_bullet_tile_collision(
