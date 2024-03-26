@@ -162,10 +162,6 @@ impl WorkerBallBundle {
             velocity: Velocity::zero(),
         }
     }
-    fn rand_x(&mut self) {
-        self.matmesh.transform.translation.x =
-            thread_rng().sample(Uniform::new(-ARENA_WIDTH_FRAC_2, ARENA_WIDTH_FRAC_2));
-    }
     // }}}
 }
 #[derive(Component)]

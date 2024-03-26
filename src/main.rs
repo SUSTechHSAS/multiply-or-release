@@ -1,4 +1,3 @@
-#![allow(dead_code)]
 
 use bevy::{
     prelude::*,
@@ -34,39 +33,6 @@ fn main() {
 
 fn setup(mut commands: Commands) {
     commands.spawn((Name::new("Camera"), Camera2dBundle::default()));
-}
-
-#[derive(Component)]
-/// Marker to mark this entity as a trigger zone.
-struct TriggerZone;
-#[derive(Bundle)]
-/// Component bundle for the trigger zones at the bottom of the side panels.
-struct TriggerZoneBundle<M: Material2d> {
-    /// Marker to mark this entity as a trigger zone.
-    marker: TriggerZone,
-    /// Bevy rendering component used to display the trigger zone.
-    mesh: MaterialMesh2dBundle<M>,
-    /// Rapier collider component. We'll mark this as a sensor since we want the balls to be able
-    /// to pass through it.
-    collider: Collider,
-}
-
-#[derive(Component)]
-/// Marker to mark this entity as a worker ball.
-struct WorkerBall;
-#[derive(Bundle)]
-/// Component bundle for the little worker balls in the side panels.
-struct WorkerBallBundle<M: Material2d> {
-    /// Marker to mark this entity as a worker ball.
-    marker: WorkerBall,
-    /// Bevy rendering component used to display the ball.
-    mesh: MaterialMesh2dBundle<M>,
-    /// Rapier collider component.
-    collider: Collider,
-    /// Rapier rigidbody component, used by the physics engine to move the entity.
-    rigidbody: RigidBody,
-    /// The game participant that owns this ball.
-    owner: Participant,
 }
 
 #[derive(Component)]
@@ -126,16 +92,18 @@ struct TurretHeadBundle<M: Material2d> {
     _text: (),
 }
 
-#[derive(Component)]
 /// Component for a turret.
+#[derive(Component)]
+#[allow(dead_code)]
 struct Turret {
     /// The angle offset in degrees of the direction that the turret barrel is pointing.
     barrel_offset: f32,
     /// The direction that the barrel would be pointing in with an offset_angle of 0.
     base_direction: Vec2,
 }
-#[derive(Bundle)]
 /// Component bundle for a turret.
+#[derive(Bundle)]
+#[allow(dead_code)]
 struct TurretBundle<M: Material2d> {
     /// Bevy rendering component used to display the ball.
     mesh: MaterialMesh2dBundle<M>,
