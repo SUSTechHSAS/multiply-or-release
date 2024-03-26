@@ -22,32 +22,41 @@ const TILE_COUNT: usize = 40;
 const TILE_DIMENSION: f32 = 8.0;
 
 const TURRET_POSITION: f32 = 350.0;
-const TURRET_RADIUS: f32 = 10.0;
 const TURRET_HEAD_COLOR: Color = Color::DARK_GRAY;
 const TURRET_HEAD_THICNESS: f32 = 2.5;
 const TURRET_HEAD_LENGTH: f32 = 75.0;
 const TURRET_ROTATION_SPEED: f32 = 1.0;
 
 const BULLET_TEXT_COLOR: Color = Color::BLACK;
-const BULLET_TEXT_FONT_SIZE: f32 = 24.0;
+const BULLET_TEXT_FONT_SIZE_ASPECT: f32 = 0.5;
+const BULLET_RADIUS_FACTOR: f32 = 5.0;
 
 // Z-index
 const TILE_Z: f32 = 10.0;
+const BULLET_BALL_Z: f32 = -1.0;
 const BULLET_TEXT_Z: f32 = 20.0;
 // Turret head is a child of turret, which inherits the z position as well, so the local z of the
 // head needs to be negative to put it behind the main turret.
 const TURRET_HEAD_Z: f32 = -1.0;
-const TURRET_Z: f32 = -1.0;
+const TURRET_PLATFORM_Z: f32 = -1.0;
 
 // }}}
 
 pub struct BattlefieldPlugin;
 impl Plugin for BattlefieldPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(Startup, setup).add_systems(
-            Update,
-            (rotate_turret, update_charge_text, handle_trigger_events),
-        );
+        app.add_systems(Startup, setup)
+            .add_systems(
+                Update,
+                (
+                    rotate_turret,
+                    update_charge_text,
+                    update_charge_ball,
+                    handle_trigger_events,
+                ),
+            )
+            .insert_resource(AutoTimer::default())
+            .add_systems(Update, auto_multiply);
     }
 }
 
@@ -88,42 +97,56 @@ impl TileBundle {
 }
 #[derive(Resource, Default, Clone)]
 struct TurretStopwatch(Stopwatch);
-#[derive(Component, Clone, Copy)]
-struct Charge(usize);
-impl Default for Charge {
-    fn default() -> Self {
-        Self(1)
+impl TurretStopwatch {
+    fn get(&self) -> f32 {
+        FRAC_PI_2 - ((self.0.elapsed_secs() % PI * TURRET_ROTATION_SPEED) % PI - FRAC_PI_2).abs()
     }
 }
+#[derive(Component, Clone, Copy)]
+struct Charge {
+    value: usize,
+    level: f32,
+    link: Entity,
+}
 impl Charge {
+    fn new(link: Entity) -> Self {
+        Self {
+            value: 1,
+            level: 1.0,
+            link,
+        }
+    }
     fn multiply(&mut self) {
-        self.0 *= 2;
+        self.value *= 2;
+        self.level += 1.0;
     }
 }
 #[derive(Component, Default)]
 struct Turret;
-#[derive(Bundle, Default)]
+#[derive(Bundle)]
 struct TurretBundle {
-    marker: Turret,
+    marker: (Turret, Sensor),
     charge: Charge,
+    platform: TurretPlatformLink,
     text_bundle: Text2dBundle,
     owner: Participant,
     collider: Collider,
 }
 impl TurretBundle {
-    fn new(owner: Participant, x: f32, y: f32) -> Self {
+    fn new(owner: Participant, x: f32, y: f32, ball: Entity, platform: Entity) -> Self {
         Self {
-            marker: Turret,
+            marker: (Turret, Sensor),
             owner,
-            charge: Default::default(),
-            collider: Collider::ball(TURRET_RADIUS),
+            charge: Charge::new(ball),
+            platform: TurretPlatformLink(platform),
+            collider: Collider::ball(1.0),
             text_bundle: Text2dBundle {
                 transform: Transform::from_xyz(x, y, BULLET_TEXT_Z),
                 text: Text::from_section(
                     "",
                     TextStyle {
                         font: Default::default(),
-                        font_size: BULLET_TEXT_FONT_SIZE,
+                        font_size: BULLET_RADIUS_FACTOR,
                         color: BULLET_TEXT_COLOR,
                     },
                 ),
@@ -163,6 +186,9 @@ impl TurretHeadBundle {
         }
     }
 }
+#[derive(Component)]
+#[allow(dead_code)]
+struct TurretPlatformLink(Entity);
 /// Component for a turret.
 #[derive(Component, Default)]
 struct BarrelOffset(f32);
@@ -170,21 +196,18 @@ struct BarrelOffset(f32);
 #[derive(Bundle, Default)]
 struct TurretPlatformBundle {
     /// Bevy rendering component used to display the ball.
-    matmesh: MaterialMesh2dBundle<ColorMaterial>,
-    marker: Sensor,
     barrel_offset: BarrelOffset,
+    spatial: SpatialBundle,
 }
 impl TurretPlatformBundle {
-    fn new(material: Handle<ColorMaterial>, mesh: Mesh2dHandle, base_offset: f32) -> Self {
+    fn new(base_offset: f32) -> Self {
         Self {
-            matmesh: MaterialMesh2dBundle {
-                transform: Transform::from_xyz(0.0, 0.0, TURRET_Z),
-                material,
-                mesh,
-                ..default()
-            },
-            marker: Sensor,
             barrel_offset: BarrelOffset(base_offset),
+            spatial: SpatialBundle::from_transform(Transform::from_xyz(
+                0.0,
+                0.0,
+                TURRET_PLATFORM_Z,
+            )),
         }
     }
 }
@@ -196,7 +219,7 @@ fn setup(
     materials: Res<ParticipantMap<Handle<ColorMaterial>>>,
 ) {
     commands.insert_resource(TurretStopwatch::default());
-    commands
+    let root = commands
         .spawn((
             Name::new("Battlefield Root"),
             SpriteBundle {
@@ -207,81 +230,62 @@ fn setup(
                 ..default()
             },
         ))
-        .with_children(|parent| {
-            parent
-                .spawn((Name::new("Battlefield"), SpatialBundle::default()))
-                .with_children(|parent| {
-                    for i in 0..TILE_COUNT {
-                        let x = (TILE_DIMENSION + TILE_BORDER_THICNESS) / 2.0
-                            + i as f32 * (TILE_DIMENSION + TILE_BORDER_THICNESS);
-                        for j in 0..TILE_COUNT {
-                            let y = (TILE_DIMENSION + TILE_BORDER_THICNESS) / 2.0
-                                + j as f32 * (TILE_DIMENSION + TILE_BORDER_THICNESS);
-                            parent.spawn(TileBundle::new(Participant::A, colors.a, x, y));
-                            parent.spawn(TileBundle::new(Participant::B, colors.b, -x, y));
-                            parent.spawn(TileBundle::new(Participant::C, colors.c, x, -y));
-                            parent.spawn(TileBundle::new(Participant::D, colors.d, -x, -y));
-                        }
-                    }
-                });
-            let mesh = Mesh2dHandle(meshes.add(Circle::new(TURRET_RADIUS)));
-            fn head_spawner(turret: &mut ChildBuilder) {
-                turret.spawn(TurretHeadBundle::new());
-            }
-            let spawn_turret =
-                |parent: &mut ChildBuilder, material: Handle<ColorMaterial>, base_offset| {
-                    parent
-                        .spawn(TurretPlatformBundle::new(
-                            material,
-                            mesh.clone(),
-                            base_offset,
-                        ))
-                        .with_children(head_spawner);
-                };
-            let a = parent
-                .spawn(TurretBundle::new(
-                    Participant::A,
-                    TURRET_POSITION,
-                    TURRET_POSITION,
-                ))
-                .with_children(|parent| {
-                    spawn_turret(parent, materials.a.clone(), PI);
-                })
-                .id();
-            let b = parent
-                .spawn(TurretBundle::new(
-                    Participant::B,
-                    -TURRET_POSITION,
-                    TURRET_POSITION,
-                ))
-                .with_children(|parent| {
-                    spawn_turret(parent, materials.b.clone(), -FRAC_PI_2);
-                })
-                .id();
-            let c = parent
-                .spawn(TurretBundle::new(
-                    Participant::C,
-                    TURRET_POSITION,
-                    -TURRET_POSITION,
-                ))
-                .with_children(|parent| {
-                    spawn_turret(parent, materials.c.clone(), FRAC_PI_2);
-                })
-                .id();
-            let d = parent
-                .spawn(TurretBundle::new(
-                    Participant::D,
-                    -TURRET_POSITION,
-                    -TURRET_POSITION,
-                ))
-                .with_children(|parent| {
-                    spawn_turret(parent, materials.d.clone(), 0.0);
-                })
-                .id();
-            let participant_entities = ParticipantMap::new(a, b, c, d);
-            parent
-                .add_command(move |world: &mut World| world.insert_resource(participant_entities));
-        });
+        .id();
+    let battlefield = commands
+        .spawn((Name::new("Battlefield"), SpatialBundle::default()))
+        .set_parent(root)
+        .id();
+    for i in 0..TILE_COUNT {
+        let x = (TILE_DIMENSION + TILE_BORDER_THICNESS) / 2.0
+            + i as f32 * (TILE_DIMENSION + TILE_BORDER_THICNESS);
+        for j in 0..TILE_COUNT {
+            let y = (TILE_DIMENSION + TILE_BORDER_THICNESS) / 2.0
+                + j as f32 * (TILE_DIMENSION + TILE_BORDER_THICNESS);
+            commands
+                .spawn(TileBundle::new(Participant::A, colors.a, x, y))
+                .set_parent(battlefield);
+            commands
+                .spawn(TileBundle::new(Participant::B, colors.b, -x, y))
+                .set_parent(battlefield);
+            commands
+                .spawn(TileBundle::new(Participant::C, colors.c, x, -y))
+                .set_parent(battlefield);
+            commands
+                .spawn(TileBundle::new(Participant::D, colors.d, -x, -y))
+                .set_parent(battlefield);
+        }
+    }
+    let mesh = Mesh2dHandle(meshes.add(Circle::new(1.0)));
+    let mut spawn_turret = |owner: Participant, base_offset: f32, x: f32, y: f32| {
+        let ball = commands
+            .spawn(MaterialMesh2dBundle {
+                transform: Transform::from_xyz(0.0, 0.0, BULLET_BALL_Z),
+                mesh: mesh.clone(),
+                material: materials.get(owner).clone(),
+                ..default()
+            })
+            .id();
+        let platform = commands
+            .spawn(TurretPlatformBundle::new(base_offset))
+            .set_parent(root)
+            .id();
+        commands.spawn(TurretHeadBundle::new()).set_parent(platform);
+        commands
+            .spawn(TurretBundle::new(owner, x, y, ball, platform))
+            .set_parent(root)
+            .push_children(&[ball, platform])
+            .id()
+    };
+    let a = spawn_turret(Participant::A, PI, TURRET_POSITION, TURRET_POSITION);
+    let b = spawn_turret(
+        Participant::B,
+        -FRAC_PI_2,
+        -TURRET_POSITION,
+        TURRET_POSITION,
+    );
+    let c = spawn_turret(Participant::C, FRAC_PI_2, TURRET_POSITION, -TURRET_POSITION);
+    let d = spawn_turret(Participant::D, 0.0, -TURRET_POSITION, -TURRET_POSITION);
+    commands.insert_resource(ParticipantMap::new(a, b, c, d));
 }
 fn rotate_turret(
     time: Res<Time>,
@@ -289,8 +293,7 @@ fn rotate_turret(
     mut turrets: Query<(&mut Transform, &BarrelOffset)>,
 ) {
     stopwatch.0.tick(time.delta());
-    let angle_offset = FRAC_PI_2
-        - ((stopwatch.0.elapsed_secs() % PI * TURRET_ROTATION_SPEED) % PI - FRAC_PI_2).abs();
+    let angle_offset = stopwatch.get();
     for (mut transform, &BarrelOffset(base_offset)) in &mut turrets {
         *transform = transform.with_rotation(Quat::from_rotation_z(base_offset - angle_offset));
     }
@@ -298,8 +301,29 @@ fn rotate_turret(
 fn update_charge_text(
     mut query: Query<(&mut Text, &Charge), Or<(Changed<Charge>, Added<Charge>)>>,
 ) {
-    for (mut text, &Charge(charge)) in &mut query {
-        text.sections[0].value = charge.to_string();
+    for (mut text, charge) in &mut query {
+        let section = &mut text.sections[0];
+        section.value = charge.value.to_string();
+        let digit_count = section.value.len() as f32;
+        let diameter = charge.level * BULLET_RADIUS_FACTOR * 2.0;
+        let full_size_horizontal = diameter * BULLET_TEXT_FONT_SIZE_ASPECT * digit_count;
+        if diameter < full_size_horizontal {
+            section.style.font_size = diameter / digit_count / BULLET_TEXT_FONT_SIZE_ASPECT;
+        } else {
+            section.style.font_size = diameter;
+        }
+    }
+}
+fn update_charge_ball(
+    mut turrets: Query<(&mut Collider, &Charge), Or<(Changed<Charge>, Added<Charge>)>>,
+    mut transform_query: Query<&mut Transform>,
+) {
+    for (mut collider, charge) in &mut turrets {
+        let scale = charge.level * BULLET_RADIUS_FACTOR;
+        collider.set_scale(Vec2::splat(scale), 1);
+        let mut ball_transform = transform_query.get_mut(charge.link).unwrap();
+        ball_transform.scale.x = scale;
+        ball_transform.scale.y = scale;
     }
 }
 fn handle_trigger_events(
@@ -321,5 +345,25 @@ fn handle_trigger_events(
                 dbg!("Not implemented");
             }
         }
+    }
+}
+#[derive(Resource)]
+struct AutoTimer(Timer);
+impl Default for AutoTimer {
+    fn default() -> Self {
+        Self(Timer::from_seconds(1.0, TimerMode::Repeating))
+    }
+}
+fn auto_multiply(
+    mut writer: EventWriter<TriggerEvent>,
+    mut timer: ResMut<AutoTimer>,
+    time: Res<Time>,
+) {
+    timer.0.tick(time.delta());
+    if timer.0.just_finished() {
+        writer.send(TriggerEvent {
+            participant: Participant::A,
+            trigger_type: TriggerType::Multiply,
+        });
     }
 }
