@@ -1,3 +1,5 @@
+#![allow(clippy::type_complexity)]
+
 use std::f32::consts::{FRAC_PI_2, PI};
 
 use bevy::{
@@ -7,7 +9,10 @@ use bevy::{
 };
 use bevy_rapier2d::prelude::*;
 
-use crate::utils::{Participant, ParticipantMap};
+use crate::{
+    panel_plugin::{TriggerEvent, TriggerType},
+    utils::{Participant, ParticipantMap},
+};
 
 // Constants {{{
 
@@ -39,8 +44,10 @@ const TURRET_Z: f32 = -1.0;
 pub struct BattlefieldPlugin;
 impl Plugin for BattlefieldPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(Startup, setup)
-            .add_systems(Update, (rotate_turret, update_charge_text));
+        app.add_systems(Startup, setup).add_systems(
+            Update,
+            (rotate_turret, update_charge_text, handle_trigger_events),
+        );
     }
 }
 
@@ -88,17 +95,28 @@ impl Default for Charge {
         Self(1)
     }
 }
+impl Charge {
+    fn multiply(&mut self) {
+        self.0 *= 2;
+    }
+}
+#[derive(Component, Default)]
+struct Turret;
 #[derive(Bundle, Default)]
 struct TurretBundle {
+    marker: Turret,
     charge: Charge,
     text_bundle: Text2dBundle,
     owner: Participant,
+    collider: Collider,
 }
 impl TurretBundle {
     fn new(owner: Participant, x: f32, y: f32) -> Self {
         Self {
+            marker: Turret,
             owner,
             charge: Default::default(),
+            collider: Collider::ball(TURRET_RADIUS),
             text_bundle: Text2dBundle {
                 transform: Transform::from_xyz(x, y, BULLET_TEXT_Z),
                 text: Text::from_section(
@@ -154,7 +172,6 @@ struct TurretPlatformBundle {
     /// Bevy rendering component used to display the ball.
     matmesh: MaterialMesh2dBundle<ColorMaterial>,
     marker: Sensor,
-    collider: Collider,
     barrel_offset: BarrelOffset,
 }
 impl TurretPlatformBundle {
@@ -167,7 +184,6 @@ impl TurretPlatformBundle {
                 ..default()
             },
             marker: Sensor,
-            collider: Collider::ball(TURRET_RADIUS),
             barrel_offset: BarrelOffset(base_offset),
         }
     }
@@ -222,7 +238,7 @@ fn setup(
                         ))
                         .with_children(head_spawner);
                 };
-            parent
+            let a = parent
                 .spawn(TurretBundle::new(
                     Participant::A,
                     TURRET_POSITION,
@@ -230,8 +246,9 @@ fn setup(
                 ))
                 .with_children(|parent| {
                     spawn_turret(parent, materials.a.clone(), PI);
-                });
-            parent
+                })
+                .id();
+            let b = parent
                 .spawn(TurretBundle::new(
                     Participant::B,
                     -TURRET_POSITION,
@@ -239,8 +256,9 @@ fn setup(
                 ))
                 .with_children(|parent| {
                     spawn_turret(parent, materials.b.clone(), -FRAC_PI_2);
-                });
-            parent
+                })
+                .id();
+            let c = parent
                 .spawn(TurretBundle::new(
                     Participant::C,
                     TURRET_POSITION,
@@ -248,8 +266,9 @@ fn setup(
                 ))
                 .with_children(|parent| {
                     spawn_turret(parent, materials.c.clone(), FRAC_PI_2);
-                });
-            parent
+                })
+                .id();
+            let d = parent
                 .spawn(TurretBundle::new(
                     Participant::D,
                     -TURRET_POSITION,
@@ -257,7 +276,11 @@ fn setup(
                 ))
                 .with_children(|parent| {
                     spawn_turret(parent, materials.d.clone(), 0.0);
-                });
+                })
+                .id();
+            let participant_entities = ParticipantMap::new(a, b, c, d);
+            parent
+                .add_command(move |world: &mut World| world.insert_resource(participant_entities));
         });
 }
 fn rotate_turret(
@@ -277,5 +300,26 @@ fn update_charge_text(
 ) {
     for (mut text, &Charge(charge)) in &mut query {
         text.sections[0].value = charge.to_string();
+    }
+}
+fn handle_trigger_events(
+    mut reader: EventReader<TriggerEvent>,
+    participants: Res<ParticipantMap<Entity>>,
+    mut turret_query: Query<&mut Charge, With<Turret>>,
+) {
+    for event in reader.read() {
+        match event.trigger_type {
+            TriggerType::Multiply => {
+                let &entity = participants.get(event.participant);
+                let mut charge = turret_query.get_mut(entity).unwrap();
+                charge.multiply()
+            }
+            TriggerType::BurstShot => {
+                dbg!("Not implemented");
+            }
+            TriggerType::ChargedShot => {
+                dbg!("Not implemented");
+            }
+        }
     }
 }
