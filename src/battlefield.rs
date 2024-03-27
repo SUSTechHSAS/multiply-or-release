@@ -62,7 +62,7 @@ impl Plugin for BattlefieldPlugin {
             ),
         );
         // .insert_resource(AutoTimer::default())
-        // .add_systems(Update, auto_multiply);
+        // .add_systems(Update, auto_fire);
     }
 }
 
@@ -291,8 +291,8 @@ impl TurretHeadBundle {
                     ..default()
                 },
                 transform: Transform {
-                    translation: Vec3::new(0.0, TURRET_HEAD_LENGTH / 2.0, TURRET_HEAD_Z),
-                    scale: Vec3::new(TURRET_HEAD_THICNESS, TURRET_HEAD_LENGTH, 1.0),
+                    translation: Vec3::new(TURRET_HEAD_LENGTH / 2.0, 0.0, TURRET_HEAD_Z),
+                    scale: Vec3::new(TURRET_HEAD_LENGTH, TURRET_HEAD_THICNESS, 1.0),
                     rotation: Quat::IDENTITY,
                 },
                 ..default()
@@ -400,15 +400,15 @@ fn setup(
             .push_children(&[ball, platform])
             .id()
     };
-    let a = spawn_turret(Participant::A, PI, TURRET_POSITION, TURRET_POSITION);
-    let b = spawn_turret(
-        Participant::B,
-        -FRAC_PI_2,
+    let a = spawn_turret(Participant::A, -FRAC_PI_2, TURRET_POSITION, TURRET_POSITION);
+    let b = spawn_turret(Participant::B, 0.0, -TURRET_POSITION, TURRET_POSITION);
+    let c = spawn_turret(Participant::C, PI, TURRET_POSITION, -TURRET_POSITION);
+    let d = spawn_turret(
+        Participant::D,
+        FRAC_PI_2,
         -TURRET_POSITION,
-        TURRET_POSITION,
+        -TURRET_POSITION,
     );
-    let c = spawn_turret(Participant::C, FRAC_PI_2, TURRET_POSITION, -TURRET_POSITION);
-    let d = spawn_turret(Participant::D, 0.0, -TURRET_POSITION, -TURRET_POSITION);
     commands.insert_resource(ParticipantMap::new(a, b, c, d));
     commands.insert_resource(BulletMesh(mesh));
 }
@@ -621,6 +621,16 @@ struct AutoTimer(Timer);
 impl Default for AutoTimer {
     fn default() -> Self {
         Self(Timer::from_seconds(1.0, TimerMode::Repeating))
+    }
+}
+#[allow(dead_code)]
+fn auto_fire(mut writer: EventWriter<TriggerEvent>, mut timer: ResMut<AutoTimer>, time: Res<Time>) {
+    timer.0.tick(time.delta());
+    if timer.0.just_finished() {
+        writer.send(TriggerEvent {
+            participant: Participant::A,
+            trigger_type: TriggerType::ChargedShot,
+        });
     }
 }
 #[allow(dead_code)]
