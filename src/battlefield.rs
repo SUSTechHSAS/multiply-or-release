@@ -615,7 +615,7 @@ fn handle_bullet_tile_collision(
         }
     }
 }
-#[derive(Resource)]
+#[derive(Resource, Deref, DerefMut)]
 #[allow(dead_code)]
 struct AutoTimer(Timer);
 impl Default for AutoTimer {
@@ -625,8 +625,8 @@ impl Default for AutoTimer {
 }
 #[allow(dead_code)]
 fn auto_fire(mut writer: EventWriter<TriggerEvent>, mut timer: ResMut<AutoTimer>, time: Res<Time>) {
-    timer.0.tick(time.delta());
-    if timer.0.just_finished() {
+    timer.tick(time.delta());
+    if timer.just_finished() {
         writer.send(TriggerEvent {
             participant: Participant::A,
             trigger_type: TriggerType::ChargedShot,
@@ -639,8 +639,8 @@ fn auto_multiply(
     mut timer: ResMut<AutoTimer>,
     time: Res<Time>,
 ) {
-    timer.0.tick(time.delta());
-    if timer.0.just_finished() {
+    timer.tick(time.delta());
+    if timer.just_finished() {
         writer.send(TriggerEvent {
             participant: Participant::A,
             trigger_type: TriggerType::Multiply,
