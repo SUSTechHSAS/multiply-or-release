@@ -2,7 +2,7 @@ use std::time::Duration;
 
 use bevy::{
     prelude::*,
-    sprite::{MaterialMesh2dBundle, Mesh2dHandle},
+    sprite::{MaterialMesh2dBundle, Mesh2dHandle}, text::Text2dBounds,
 };
 use bevy_rapier2d::prelude::*;
 use rand::{distributions::Uniform, thread_rng, Rng};
@@ -52,7 +52,8 @@ const WALL_Z: f32 = 0.0;
 const ARENA_Z: f32 = 1.0;
 const CIRCLE_Z: f32 = 2.0;
 const TRIGGER_ZONE_Z: f32 = 2.0;
-const WORKER_BALL_Z: f32 = 3.0;
+const TRIGGER_ZONE_TEXT_OFFSET_Z: f32 = 3.0;
+const WORKER_BALL_Z: f32 = 4.0;
 
 // Calculated
 const WALL_HEIGHT: f32 = ARENA_HEIGHT + 2.0 * WALL_THICKNESS;
@@ -90,6 +91,16 @@ pub enum TriggerType {
     BurstShot,
     ChargedShot,
 }
+impl std::fmt::Display for TriggerType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Multiply => write!(f, "Multiply"),
+            Self::BurstShot => write!(f, "Release Burst Shots"),
+            Self::ChargedShot => write!(f, "Release Changed Shots"),
+        }
+    }
+}
+
 #[derive(Bundle, Clone, Resource)]
 struct TriggerZoneBundle {
     // {{{
@@ -330,6 +341,23 @@ fn setup(
                 Vec3::new(0.0, TRIGGER_ZONE_Y, TRIGGER_ZONE_Z),
                 MULTIPLY_ZONE_COLOR,
             ));
+            parent.spawn(Text2dBundle {
+                text: Text::from_section(TriggerType::Multiply.to_string(), TextStyle { 
+                    color: Color::BLACK,
+                    ..default() 
+                }).with_justify(JustifyText::Center),
+                transform: Transform {
+                    translation: Vec3 { 
+                        x: 0.0, y: TRIGGER_ZONE_Y, z: TRIGGER_ZONE_TEXT_OFFSET_Z },
+                    ..default()
+                },
+                text_2d_bounds: Text2dBounds {
+                    size: Vec2::new(ARENA_WIDTH_FRAC_2, TRIGGER_ZONE_HEIGHT),
+                    ..default()
+                },
+                ..default()
+            });
+
             parent.spawn(TriggerZoneBundle::new(
                 TriggerType::BurstShot,
                 Vec2::new(ARENA_WIDTH_FRAC_4, TRIGGER_ZONE_HEIGHT),
@@ -340,6 +368,23 @@ fn setup(
                 ),
                 BURST_SHOT_ZONE_COLOR,
             ));
+            parent.spawn(Text2dBundle {
+                text: Text::from_section(TriggerType::BurstShot.to_string(), TextStyle { 
+                    color: Color::BLACK,
+                    ..default() 
+                }).with_justify(JustifyText::Center),
+                transform: Transform {
+                    translation: Vec3 { 
+                        x: ARENA_WIDTH_FRAC_4 + ARENA_WIDTH_FRAC_8, y: TRIGGER_ZONE_Y, z: TRIGGER_ZONE_TEXT_OFFSET_Z },
+                    ..default()
+                },
+                text_2d_bounds: Text2dBounds {
+                    size: Vec2::new(ARENA_WIDTH_FRAC_4, TRIGGER_ZONE_HEIGHT),
+                    ..default()
+                },
+                ..default()
+            });
+            
             parent.spawn(TriggerZoneBundle::new(
                 TriggerType::ChargedShot,
                 Vec2::new(ARENA_WIDTH_FRAC_4, TRIGGER_ZONE_HEIGHT),
@@ -350,7 +395,23 @@ fn setup(
                 ),
                 CHARGED_SHOT_ZONE_COLOR,
             ));
-
+            parent.spawn(Text2dBundle {
+                text: Text::from_section(TriggerType::ChargedShot.to_string(), TextStyle { 
+                    color: Color::BLACK,
+                    ..default() 
+                }).with_justify(JustifyText::Center),
+                transform: Transform {
+                    translation: Vec3 { 
+                        x: -ARENA_WIDTH_FRAC_4 - ARENA_WIDTH_FRAC_8, y: TRIGGER_ZONE_Y, z: TRIGGER_ZONE_TEXT_OFFSET_Z },
+                    ..default()
+                },
+                text_2d_bounds: Text2dBounds {
+                    size: Vec2::new(ARENA_WIDTH_FRAC_4, TRIGGER_ZONE_HEIGHT),
+                    ..default()
+                },
+                ..default()
+            });
+            
             parent.spawn(SpriteBundle {
                 transform: Transform {
                     translation: Vec3::new(0.0, 0.0, WALL_Z),
