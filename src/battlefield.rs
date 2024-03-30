@@ -115,24 +115,25 @@ impl TurretStopwatch {
         FRAC_PI_2 - ((self.0.elapsed_secs() % PI * TURRET_ROTATION_SPEED) % PI - FRAC_PI_2).abs()
     }
 }
+#[derive(Component, Deref, Clone, Copy)]
+struct ChargeBallLink(Entity);
 #[derive(Component, Clone, Copy)]
 struct Charge {
     value: f32,
     level: f32,
-    link: Entity,
 }
-impl From<Entity> for Charge {
-    fn from(link: Entity) -> Self {
+impl Default for Charge {
+    fn default() -> Self {
         Self {
             value: 1.0,
             level: 1.0,
-            link,
         }
     }
 }
 impl Charge {
-    fn new(value: f32, level: f32, link: Entity) -> Self {
-        Self { value, level, link }
+    #[allow(dead_code)]
+    fn new(value: f32, level: f32) -> Self {
+        Self { value, level }
     }
     fn multiply(&mut self) {
         self.value *= 2.0;
@@ -141,6 +142,9 @@ impl Charge {
     fn reset(&mut self) {
         self.value = 1.0;
         self.level = 1.0;
+    }
+    fn get_scale(&self) -> f32 {
+        self.level * BULLET_RADIUS_FACTOR
     }
 }
 #[derive(Bundle)]
@@ -176,6 +180,7 @@ struct BulletBundle {
         ActiveEvents,
     ),
     charge: Charge,
+    link: ChargeBallLink,
     /// Rapier collider component.
     collider: Collider,
     collision_groups: CollisionGroups,
@@ -195,12 +200,13 @@ impl BulletBundle {
         x: f32,
         y: f32,
         ball: Entity,
-        charge: &Charge,
+        charge: Charge,
         firing_angle: f32,
     ) -> Self {
         Self {
             owner,
-            charge: Charge::new(charge.value, charge.level, ball),
+            charge,
+            link: ChargeBallLink(ball),
             markers: (
                 Bullet,
                 GravityScale(0.0),
@@ -252,6 +258,7 @@ struct Turret;
 struct TurretBundle {
     marker: (Turret, Sensor),
     charge: Charge,
+    link: ChargeBallLink,
     platform: TurretPlatformLink,
     text_bundle: Text2dBundle,
     owner: Participant,
@@ -264,7 +271,8 @@ impl TurretBundle {
         Self {
             marker: (Turret, Sensor),
             owner,
-            charge: Charge::from(ball),
+            charge: Charge::default(),
+            link: ChargeBallLink(ball),
             platform: TurretPlatformLink(platform),
             collider: Collider::ball(1.0),
             collision_groups: CollisionGroups::new(
@@ -476,13 +484,16 @@ fn update_charge_text(
     }
 }
 fn update_charge_ball(
-    mut turrets: Query<(&mut ColliderScale, &Charge), Or<(Changed<Charge>, Added<Charge>)>>,
+    mut turrets: Query<
+        (&mut ColliderScale, &Charge, &ChargeBallLink),
+        Or<(Changed<Charge>, Added<Charge>)>,
+    >,
     mut transform_query: Query<&mut Transform>,
 ) {
-    for (mut collider_scale, charge) in &mut turrets {
-        let scale = charge.level * BULLET_RADIUS_FACTOR;
+    for (mut collider_scale, charge, &ChargeBallLink(link)) in &mut turrets {
+        let scale = charge.get_scale();
         *collider_scale = ColliderScale::Absolute(Vect::splat(scale));
-        let mut ball_transform = transform_query.get_mut(charge.link).unwrap();
+        let mut ball_transform = transform_query.get_mut(link).unwrap();
         ball_transform.scale.x = scale;
         ball_transform.scale.y = scale;
     }
@@ -523,7 +534,7 @@ fn handle_trigger_events(
                         transform.translation.x,
                         transform.translation.y,
                         ball,
-                        &charge,
+                        *charge,
                         turret_stopwatch.get() + base_angle,
                     ))
                     .set_parent(root.single())
