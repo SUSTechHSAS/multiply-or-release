@@ -392,7 +392,6 @@ fn setup(
             },
             text_2d_bounds: Text2dBounds {
                 size: Vec2::new(ARENA_WIDTH_FRAC_2, TRIGGER_ZONE_HEIGHT),
-                ..default()
             },
             ..default()
         })
@@ -430,7 +429,6 @@ fn setup(
             },
             text_2d_bounds: Text2dBounds {
                 size: Vec2::new(ARENA_WIDTH_FRAC_4, TRIGGER_ZONE_HEIGHT),
-                ..default()
             },
             ..default()
         })
@@ -468,7 +466,6 @@ fn setup(
             },
             text_2d_bounds: Text2dBounds {
                 size: Vec2::new(ARENA_WIDTH_FRAC_4, TRIGGER_ZONE_HEIGHT),
-                ..default()
             },
             ..default()
         })
