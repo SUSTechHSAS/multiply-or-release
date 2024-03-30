@@ -2,7 +2,8 @@ use std::time::Duration;
 
 use bevy::{
     prelude::*,
-    sprite::{MaterialMesh2dBundle, Mesh2dHandle}, text::Text2dBounds,
+    sprite::{MaterialMesh2dBundle, Mesh2dHandle},
+    text::Text2dBounds,
 };
 use bevy_rapier2d::prelude::*;
 use rand::{distributions::Uniform, thread_rng, Rng};
@@ -265,7 +266,7 @@ fn setup(
         timer,
         counter: 0,
     });
-    commands
+    let root = commands
         .spawn((
             Name::new("PanelRoot"),
             PanelRoot,
@@ -282,161 +283,225 @@ fn setup(
                 None,
             ),
         ))
-        .with_children(|parent| {
-            let circle_builder = ObstacleBundleBuilder::new()
-                .z(CIRCLE_Z)
-                .material(materials.add(CIRCLE_COLOR))
-                .mesh(meshes.add(Circle::new(CIRCLE_RADIUS)))
-                .collider(Collider::ball(CIRCLE_RADIUS));
+        .id();
+    let circle_builder = ObstacleBundleBuilder::new()
+        .z(CIRCLE_Z)
+        .material(materials.add(CIRCLE_COLOR))
+        .mesh(meshes.add(Circle::new(CIRCLE_RADIUS)))
+        .collider(Collider::ball(CIRCLE_RADIUS));
 
-            for i in 0..CIRCLE_PYRAMID_VERTICAL_COUNT {
-                let y = -(i as f32) * (CIRCLE_DIAMETER + CIRCLE_PYRAMID_VERTICAL_GAP)
-                    + CIRCLE_PYRAMID_VERTICAL_OFFSET;
-                if i % 2 == 0 {
-                    parent.spawn(circle_builder.clone().xy(0.0, y).buildtmb());
+    for i in 0..CIRCLE_PYRAMID_VERTICAL_COUNT {
+        let y = -(i as f32) * (CIRCLE_DIAMETER + CIRCLE_PYRAMID_VERTICAL_GAP)
+            + CIRCLE_PYRAMID_VERTICAL_OFFSET;
+        if i % 2 == 0 {
+            commands
+                .spawn(circle_builder.clone().xy(0.0, y).buildtmb())
+                .set_parent(root);
 
-                    for j in 1..=i / 2 {
-                        let x = j as f32 * (CIRCLE_DIAMETER + CIRCLE_PYRAMID_HORIZONTAL_GAP);
-                        parent.spawn(circle_builder.clone().xy(x, y).buildtmb());
-                        parent.spawn(circle_builder.clone().xy(-x, y).buildtmb());
-                    }
-                } else {
-                    let x0 = CIRCLE_HALF_GAP + CIRCLE_RADIUS;
-                    parent.spawn(circle_builder.clone().xy(x0, y).buildtmb());
-                    parent.spawn(circle_builder.clone().xy(-x0, y).buildtmb());
-                    for j in 1..(i / 2) + 1 {
-                        let x = j as f32 * (CIRCLE_DIAMETER + CIRCLE_PYRAMID_HORIZONTAL_GAP) + x0;
-                        parent.spawn(circle_builder.clone().xy(x, y).buildtmb());
-                        parent.spawn(circle_builder.clone().xy(-x, y).buildtmb());
-                    }
-                }
+            for j in 1..=i / 2 {
+                let x = j as f32 * (CIRCLE_DIAMETER + CIRCLE_PYRAMID_HORIZONTAL_GAP);
+                commands
+                    .spawn(circle_builder.clone().xy(x, y).buildtmb())
+                    .set_parent(root);
+                commands
+                    .spawn(circle_builder.clone().xy(-x, y).buildtmb())
+                    .set_parent(root);
             }
-
-            for i in 0..CIRCLE_GRID_VERTICAL_COUNT {
-                let y = -(i as f32) * (CIRCLE_DIAMETER + CIRCLE_GRID_VERTICAL_GAP)
-                    + CIRCLE_GRID_VERTICAL_OFFSET;
-                if i % 2 == 0 {
-                    parent.spawn(circle_builder.clone().xy(0.0, y).buildtmb());
-
-                    for j in 1..=CIRCLE_GRID_HORIZONTAL_HALF_COUNT_EVEN_ROW {
-                        let x = j as f32 * (CIRCLE_DIAMETER + CIRCLE_GRID_HORIZONTAL_GAP);
-                        parent.spawn(circle_builder.clone().xy(x, y).buildtmb());
-                        parent.spawn(circle_builder.clone().xy(-x, y).buildtmb());
-                    }
-                } else {
-                    let x0 = CIRCLE_HALF_GAP + CIRCLE_RADIUS;
-                    parent.spawn(circle_builder.clone().xy(x0, y).buildtmb());
-                    parent.spawn(circle_builder.clone().xy(-x0, y).buildtmb());
-                    for j in 1..CIRCLE_GRID_HORIZONTAL_HALF_COUNT_ODD_ROW {
-                        let x = j as f32 * (CIRCLE_DIAMETER + CIRCLE_GRID_HORIZONTAL_GAP) + x0;
-                        parent.spawn(circle_builder.clone().xy(x, y).buildtmb());
-                        parent.spawn(circle_builder.clone().xy(-x, y).buildtmb());
-                    }
-                }
+        } else {
+            let x0 = CIRCLE_HALF_GAP + CIRCLE_RADIUS;
+            commands
+                .spawn(circle_builder.clone().xy(x0, y).buildtmb())
+                .set_parent(root);
+            commands
+                .spawn(circle_builder.clone().xy(-x0, y).buildtmb())
+                .set_parent(root);
+            for j in 1..(i / 2) + 1 {
+                let x = j as f32 * (CIRCLE_DIAMETER + CIRCLE_PYRAMID_HORIZONTAL_GAP) + x0;
+                commands
+                    .spawn(circle_builder.clone().xy(x, y).buildtmb())
+                    .set_parent(root);
+                commands
+                    .spawn(circle_builder.clone().xy(-x, y).buildtmb())
+                    .set_parent(root);
             }
+        }
+    }
 
-            parent.spawn(TriggerZoneBundle::new(
-                TriggerType::Multiply,
-                Vec2::new(ARENA_WIDTH_FRAC_2, TRIGGER_ZONE_HEIGHT),
-                Vec3::new(0.0, TRIGGER_ZONE_Y, TRIGGER_ZONE_Z),
-                MULTIPLY_ZONE_COLOR,
-            ));
-            parent.spawn(Text2dBundle {
-                text: Text::from_section(TriggerType::Multiply.to_string(), TextStyle { 
-                    color: Color::BLACK,
-                    ..default() 
-                }).with_justify(JustifyText::Center),
-                transform: Transform {
-                    translation: Vec3 { 
-                        x: 0.0, y: TRIGGER_ZONE_Y, z: TRIGGER_ZONE_TEXT_OFFSET_Z },
-                    ..default()
-                },
-                text_2d_bounds: Text2dBounds {
-                    size: Vec2::new(ARENA_WIDTH_FRAC_2, TRIGGER_ZONE_HEIGHT),
-                    ..default()
-                },
-                ..default()
-            });
+    for i in 0..CIRCLE_GRID_VERTICAL_COUNT {
+        let y = -(i as f32) * (CIRCLE_DIAMETER + CIRCLE_GRID_VERTICAL_GAP)
+            + CIRCLE_GRID_VERTICAL_OFFSET;
+        if i % 2 == 0 {
+            commands
+                .spawn(circle_builder.clone().xy(0.0, y).buildtmb())
+                .set_parent(root);
 
-            parent.spawn(TriggerZoneBundle::new(
-                TriggerType::BurstShot,
-                Vec2::new(ARENA_WIDTH_FRAC_4, TRIGGER_ZONE_HEIGHT),
-                Vec3::new(
-                    ARENA_WIDTH_FRAC_4 + ARENA_WIDTH_FRAC_8,
-                    TRIGGER_ZONE_Y,
-                    TRIGGER_ZONE_Z,
-                ),
-                BURST_SHOT_ZONE_COLOR,
-            ));
-            parent.spawn(Text2dBundle {
-                text: Text::from_section(TriggerType::BurstShot.to_string(), TextStyle { 
+            for j in 1..=CIRCLE_GRID_HORIZONTAL_HALF_COUNT_EVEN_ROW {
+                let x = j as f32 * (CIRCLE_DIAMETER + CIRCLE_GRID_HORIZONTAL_GAP);
+                commands
+                    .spawn(circle_builder.clone().xy(x, y).buildtmb())
+                    .set_parent(root);
+                commands
+                    .spawn(circle_builder.clone().xy(-x, y).buildtmb())
+                    .set_parent(root);
+            }
+        } else {
+            let x0 = CIRCLE_HALF_GAP + CIRCLE_RADIUS;
+            commands
+                .spawn(circle_builder.clone().xy(x0, y).buildtmb())
+                .set_parent(root);
+            commands
+                .spawn(circle_builder.clone().xy(-x0, y).buildtmb())
+                .set_parent(root);
+            for j in 1..CIRCLE_GRID_HORIZONTAL_HALF_COUNT_ODD_ROW {
+                let x = j as f32 * (CIRCLE_DIAMETER + CIRCLE_GRID_HORIZONTAL_GAP) + x0;
+                commands
+                    .spawn(circle_builder.clone().xy(x, y).buildtmb())
+                    .set_parent(root);
+                commands
+                    .spawn(circle_builder.clone().xy(-x, y).buildtmb())
+                    .set_parent(root);
+            }
+        }
+    }
+
+    commands
+        .spawn(TriggerZoneBundle::new(
+            TriggerType::Multiply,
+            Vec2::new(ARENA_WIDTH_FRAC_2, TRIGGER_ZONE_HEIGHT),
+            Vec3::new(0.0, TRIGGER_ZONE_Y, TRIGGER_ZONE_Z),
+            MULTIPLY_ZONE_COLOR,
+        ))
+        .set_parent(root);
+    commands
+        .spawn(Text2dBundle {
+            text: Text::from_section(
+                TriggerType::Multiply.to_string(),
+                TextStyle {
                     color: Color::BLACK,
-                    ..default() 
-                }).with_justify(JustifyText::Center),
-                transform: Transform {
-                    translation: Vec3 { 
-                        x: ARENA_WIDTH_FRAC_4 + ARENA_WIDTH_FRAC_8, y: TRIGGER_ZONE_Y, z: TRIGGER_ZONE_TEXT_OFFSET_Z },
                     ..default()
                 },
-                text_2d_bounds: Text2dBounds {
-                    size: Vec2::new(ARENA_WIDTH_FRAC_4, TRIGGER_ZONE_HEIGHT),
-                    ..default()
+            )
+            .with_justify(JustifyText::Center),
+            transform: Transform {
+                translation: Vec3 {
+                    x: 0.0,
+                    y: TRIGGER_ZONE_Y,
+                    z: TRIGGER_ZONE_TEXT_OFFSET_Z,
                 },
                 ..default()
-            });
-            
-            parent.spawn(TriggerZoneBundle::new(
-                TriggerType::ChargedShot,
-                Vec2::new(ARENA_WIDTH_FRAC_4, TRIGGER_ZONE_HEIGHT),
-                Vec3::new(
-                    -ARENA_WIDTH_FRAC_4 - ARENA_WIDTH_FRAC_8,
-                    TRIGGER_ZONE_Y,
-                    TRIGGER_ZONE_Z,
-                ),
-                CHARGED_SHOT_ZONE_COLOR,
-            ));
-            parent.spawn(Text2dBundle {
-                text: Text::from_section(TriggerType::ChargedShot.to_string(), TextStyle { 
+            },
+            text_2d_bounds: Text2dBounds {
+                size: Vec2::new(ARENA_WIDTH_FRAC_2, TRIGGER_ZONE_HEIGHT),
+                ..default()
+            },
+            ..default()
+        })
+        .set_parent(root);
+
+    commands
+        .spawn(TriggerZoneBundle::new(
+            TriggerType::BurstShot,
+            Vec2::new(ARENA_WIDTH_FRAC_4, TRIGGER_ZONE_HEIGHT),
+            Vec3::new(
+                ARENA_WIDTH_FRAC_4 + ARENA_WIDTH_FRAC_8,
+                TRIGGER_ZONE_Y,
+                TRIGGER_ZONE_Z,
+            ),
+            BURST_SHOT_ZONE_COLOR,
+        ))
+        .set_parent(root);
+    commands
+        .spawn(Text2dBundle {
+            text: Text::from_section(
+                TriggerType::BurstShot.to_string(),
+                TextStyle {
                     color: Color::BLACK,
-                    ..default() 
-                }).with_justify(JustifyText::Center),
-                transform: Transform {
-                    translation: Vec3 { 
-                        x: -ARENA_WIDTH_FRAC_4 - ARENA_WIDTH_FRAC_8, y: TRIGGER_ZONE_Y, z: TRIGGER_ZONE_TEXT_OFFSET_Z },
                     ..default()
                 },
-                text_2d_bounds: Text2dBounds {
-                    size: Vec2::new(ARENA_WIDTH_FRAC_4, TRIGGER_ZONE_HEIGHT),
-                    ..default()
+            )
+            .with_justify(JustifyText::Center),
+            transform: Transform {
+                translation: Vec3 {
+                    x: ARENA_WIDTH_FRAC_4 + ARENA_WIDTH_FRAC_8,
+                    y: TRIGGER_ZONE_Y,
+                    z: TRIGGER_ZONE_TEXT_OFFSET_Z,
                 },
                 ..default()
-            });
-            
-            parent.spawn(SpriteBundle {
-                transform: Transform {
-                    translation: Vec3::new(0.0, 0.0, WALL_Z),
-                    scale: Vec3::new(WALL_WIDTH, WALL_HEIGHT, 1.0),
-                    rotation: Quat::IDENTITY,
-                },
-                sprite: Sprite {
-                    color: WALL_COLOR,
+            },
+            text_2d_bounds: Text2dBounds {
+                size: Vec2::new(ARENA_WIDTH_FRAC_4, TRIGGER_ZONE_HEIGHT),
+                ..default()
+            },
+            ..default()
+        })
+        .set_parent(root);
+
+    commands
+        .spawn(TriggerZoneBundle::new(
+            TriggerType::ChargedShot,
+            Vec2::new(ARENA_WIDTH_FRAC_4, TRIGGER_ZONE_HEIGHT),
+            Vec3::new(
+                -ARENA_WIDTH_FRAC_4 - ARENA_WIDTH_FRAC_8,
+                TRIGGER_ZONE_Y,
+                TRIGGER_ZONE_Z,
+            ),
+            CHARGED_SHOT_ZONE_COLOR,
+        ))
+        .set_parent(root);
+    commands
+        .spawn(Text2dBundle {
+            text: Text::from_section(
+                TriggerType::ChargedShot.to_string(),
+                TextStyle {
+                    color: Color::BLACK,
                     ..default()
                 },
-                ..default()
-            });
-            parent.spawn(SpriteBundle {
-                transform: Transform {
-                    translation: Vec3::new(0.0, 0.0, 1.0),
-                    scale: Vec3::new(ARENA_WIDTH, ARENA_HEIGHT, ARENA_Z),
-                    rotation: Quat::IDENTITY,
-                },
-                sprite: Sprite {
-                    color: ARENA_COLOR,
-                    ..default()
+            )
+            .with_justify(JustifyText::Center),
+            transform: Transform {
+                translation: Vec3 {
+                    x: -ARENA_WIDTH_FRAC_4 - ARENA_WIDTH_FRAC_8,
+                    y: TRIGGER_ZONE_Y,
+                    z: TRIGGER_ZONE_TEXT_OFFSET_Z,
                 },
                 ..default()
-            });
-        });
+            },
+            text_2d_bounds: Text2dBounds {
+                size: Vec2::new(ARENA_WIDTH_FRAC_4, TRIGGER_ZONE_HEIGHT),
+                ..default()
+            },
+            ..default()
+        })
+        .set_parent(root);
+
+    commands
+        .spawn(SpriteBundle {
+            transform: Transform {
+                translation: Vec3::new(0.0, 0.0, WALL_Z),
+                scale: Vec3::new(WALL_WIDTH, WALL_HEIGHT, 1.0),
+                rotation: Quat::IDENTITY,
+            },
+            sprite: Sprite {
+                color: WALL_COLOR,
+                ..default()
+            },
+            ..default()
+        })
+        .set_parent(root);
+    commands
+        .spawn(SpriteBundle {
+            transform: Transform {
+                translation: Vec3::new(0.0, 0.0, 1.0),
+                scale: Vec3::new(ARENA_WIDTH, ARENA_HEIGHT, ARENA_Z),
+                rotation: Quat::IDENTITY,
+            },
+            sprite: Sprite {
+                color: ARENA_COLOR,
+                ..default()
+            },
+            ..default()
+        })
+        .set_parent(root);
 }
 fn spawn_workers_condition(spawner: Res<WorkerBallSpawner>) -> bool {
     spawner.counter < WORKER_BALL_COUNT_MAX
