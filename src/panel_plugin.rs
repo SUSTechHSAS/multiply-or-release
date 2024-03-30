@@ -6,7 +6,11 @@ use bevy::{
     text::Text2dBounds,
 };
 use bevy_rapier2d::prelude::*;
-use rand::{distributions::Uniform, thread_rng, Rng};
+use rand::{
+    distributions::{DistIter, Distribution, Uniform},
+    rngs::ThreadRng,
+    thread_rng, Rng,
+};
 
 use crate::{
     collision_groups::{self, PANEL_OBSTACLES, PANEL_TRIGGER_ZONES},
@@ -536,53 +540,35 @@ fn spawn_workers(
 ) {
     if spawner.timer.just_finished() {
         let (root_entity, root_transform) = root.single();
-        let Vec3 {
-            x: root_x,
-            y: root_y,
-            z: _,
-        } = root_transform.translation();
         let collider = Collider::ball(WORKER_BALL_RADIUS);
-        let mut rng = thread_rng();
-        let dist = Uniform::new(-ARENA_WIDTH_FRAC_2, ARENA_WIDTH_FRAC_2);
-        let mut f = || {
-            for _ in 0..50 {
-                let x = rng.sample(dist);
-                if rapier
-                    .intersection_with_shape(
-                        Vect::new(x + root_x, WORKER_BALL_SPAWN_Y + root_y),
-                        0.0,
-                        &collider,
-                        QueryFilter::default(),
-                    )
-                    .is_none()
-                {
-                    return x;
-                }
-            }
-            panic!("failed to find a suitable location to spawn ball.");
-        };
+        let mut caster = WorkerBallShapeCaster::new(
+            root_transform.translation().xy(),
+            Uniform::new(-ARENA_WIDTH_FRAC_2, ARENA_WIDTH_FRAC_2),
+            &rapier,
+            &collider,
+        );
         fn too_close(a: f32, b: f32) -> bool {
             (a - b).abs() <= WORKER_BALL_DIAMETER
         }
-        let x0 = f();
+        let x0 = caster.get();
         let x1 = {
-            let mut x1 = f();
+            let mut x1 = caster.get();
             while too_close(x0, x1) {
-                x1 = f();
+                x1 = caster.get();
             }
             x1
         };
         let x2 = {
-            let mut x2 = f();
+            let mut x2 = caster.get();
             while too_close(x0, x2) || too_close(x1, x2) {
-                x2 = f();
+                x2 = caster.get();
             }
             x2
         };
         let x3 = {
-            let mut x3 = f();
+            let mut x3 = caster.get();
             while too_close(x0, x3) || too_close(x1, x3) || too_close(x2, x3) {
-                x3 = f();
+                x3 = caster.get();
             }
             x3
         };
@@ -684,36 +670,61 @@ fn ball_reset(
                     continue;
                 };
 
-                let x = {
-                    let Vec3 {
-                        x: root_x,
-                        y: root_y,
-                        z: _,
-                    } = root.single().translation();
-                    let mut rng = thread_rng();
-                    let dist = Uniform::new(-ARENA_WIDTH_FRAC_2, ARENA_WIDTH_FRAC_2);
-                    let mut x;
-                    loop {
-                        x = rng.sample(dist);
-                        if rapier
-                            .intersection_with_shape(
-                                Vect::new(x + root_x, WORKER_BALL_SPAWN_Y + root_y),
-                                0.0,
-                                collider,
-                                QueryFilter::default(),
-                            )
-                            .is_none()
-                        {
-                            break;
-                        }
-                    }
-                    x
-                };
-
+                let x = WorkerBallShapeCaster::new(
+                    root.single().translation().xy(),
+                    Uniform::new(-ARENA_WIDTH_FRAC_2, ARENA_WIDTH_FRAC_2),
+                    &rapier,
+                    collider,
+                )
+                .get();
                 ball_transform.translation.x = x;
                 ball_transform.translation.y = WORKER_BALL_SPAWN_Y;
                 *velocity = Velocity::zero();
             }
         }
+    }
+}
+struct WorkerBallShapeCaster<'a, 'b, D> {
+    root_position: Vec2,
+    rng_iter: DistIter<D, ThreadRng, f32>,
+    rapier: &'a RapierContext,
+    collider: &'b Collider,
+}
+impl<'a, 'b, D: Distribution<f32>> WorkerBallShapeCaster<'a, 'b, D> {
+    fn new(
+        root_position: Vec2,
+        dist: D,
+        rapier: &'a RapierContext,
+        collider: &'b Collider,
+    ) -> Self {
+        Self {
+            root_position,
+            rng_iter: thread_rng().sample_iter(dist),
+            rapier,
+            collider,
+        }
+    }
+    fn get(&mut self) -> f32 {
+        for x in &mut self.rng_iter {
+            if self
+                .rapier
+                .intersection_with_shape(
+                    Vect::new(
+                        x + self.root_position.x,
+                        WORKER_BALL_SPAWN_Y + self.root_position.y,
+                    ),
+                    0.0,
+                    self.collider,
+                    QueryFilter::only_dynamic().groups(CollisionGroups::new(
+                        collision_groups::PANEL_BALLS,
+                        collision_groups::PANEL_BALLS,
+                    )),
+                )
+                .is_none()
+            {
+                return x;
+            }
+        }
+        unreachable!("`self.rng_iter: DistIter` is an infinite iterator.");
     }
 }
