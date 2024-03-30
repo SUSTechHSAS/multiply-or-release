@@ -8,7 +8,11 @@ use bevy::{
 use bevy_rapier2d::prelude::*;
 use rand::{distributions::Uniform, thread_rng, Rng};
 
-use crate::{utils::ParticipantMap, Participant};
+use crate::{
+    collision_groups::{self, PANEL_OBSTACLES, PANEL_TRIGGER_ZONES},
+    utils::ParticipantMap,
+    Participant,
+};
 
 // Constants {{{
 
@@ -107,6 +111,7 @@ struct TriggerZoneBundle {
     // {{{
     sprite_bundle: SpriteBundle,
     collider: Collider,
+    collision_groups: CollisionGroups,
     trigger_type: TriggerType,
     markers: (ActiveEvents, Sensor),
 }
@@ -123,6 +128,10 @@ impl TriggerZoneBundle {
                 ..default()
             },
             collider: Collider::cuboid(0.5, 0.5),
+            collision_groups: CollisionGroups::new(
+                collision_groups::PANEL_TRIGGER_ZONES,
+                collision_groups::PANEL_BALLS,
+            ),
             trigger_type,
             markers: (ActiveEvents::COLLISION_EVENTS, Sensor),
         }
@@ -145,6 +154,7 @@ struct WorkerBallBundle {
     participant: Participant,
     matmesh: MaterialMesh2dBundle<ColorMaterial>,
     collider: Collider,
+    collision_groups: CollisionGroups,
     restitution: Restitution,
     rigidbody: RigidBody,
     velocity: Velocity,
@@ -166,6 +176,10 @@ impl WorkerBallBundle {
                 ..default()
             },
             collider: Collider::ball(WORKER_BALL_RADIUS),
+            collision_groups: CollisionGroups::new(
+                collision_groups::PANEL_BALLS,
+                collision_groups::PANEL_BALLS | PANEL_OBSTACLES | PANEL_TRIGGER_ZONES,
+            ),
             restitution: Restitution {
                 coefficient: WORKER_BALL_RESTITUTION_COEFFICIENT,
                 combine_rule: CoefficientCombineRule::Max,
@@ -188,6 +202,7 @@ struct ObstacleBundle {
     matmesh: MaterialMesh2dBundle<ColorMaterial>,
     /// Rapier collider component.
     collider: Collider,
+    collision_groups: CollisionGroups,
     /// Rapier rigidbody component. We'll set this to static since we don't want these to move, but
     /// we'd other balls to bounce off it.
     rigidbody: RigidBody,
@@ -244,6 +259,10 @@ impl ObstacleBundleBuilder {
                 ..default()
             },
             collider,
+            collision_groups: CollisionGroups::new(
+                collision_groups::PANEL_OBSTACLES,
+                collision_groups::PANEL_BALLS,
+            ),
             rigidbody: RigidBody::Fixed,
         })
     }
@@ -272,6 +291,10 @@ fn setup(
             PanelRoot,
             SpatialBundle::from_transform(Transform::from_xyz(ROOT_X_OFFSET, 0.0, 0.0)),
             RigidBody::Fixed,
+            CollisionGroups::new(
+                collision_groups::PANEL_OBSTACLES,
+                collision_groups::PANEL_BALLS,
+            ),
             Collider::polyline(
                 vec![
                     Vec2::new(-ARENA_WIDTH_FRAC_2, ARENA_HEIGHT_FRAC_2),

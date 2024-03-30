@@ -1,11 +1,12 @@
 use battlefield::BattlefieldPlugin;
 use bevy::prelude::*;
-use bevy_inspector_egui::quick::WorldInspectorPlugin;
+// use bevy_inspector_egui::quick::WorldInspectorPlugin;
 use bevy_rapier2d::prelude::*;
 use panel_plugin::PanelPlugin;
 use utils::{Participant, UtilsPlugin};
 
 mod battlefield;
+mod collision_groups;
 mod panel_plugin;
 mod utils;
 
@@ -23,7 +24,7 @@ fn main() {
         .add_plugins(DefaultPlugins.set(window_plugin))
         .add_plugins(RapierPhysicsPlugin::<NoUserData>::default())
         // .add_plugins(RapierDebugRenderPlugin::default())
-        .add_plugins(WorldInspectorPlugin::new())
+        // .add_plugins(WorldInspectorPlugin::new())
         .add_plugins((UtilsPlugin, PanelPlugin, BattlefieldPlugin))
         .add_systems(Startup, setup)
         .run();

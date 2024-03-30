@@ -6,6 +6,7 @@ use bevy::{prelude::*, sprite::Mesh2dHandle, time::Stopwatch};
 use bevy_rapier2d::prelude::*;
 
 use crate::{
+    collision_groups,
     panel_plugin::{TriggerEvent, TriggerType},
     utils::{Participant, ParticipantMap},
 };
@@ -58,7 +59,6 @@ impl Plugin for BattlefieldPlugin {
                 update_charge_level.after(handle_bullet_turret_collision),
                 update_charge_text.after(update_charge_level),
                 update_charge_ball.after(update_charge_level),
-                update_tile_color.after(handle_bullet_tile_collision),
             ),
         );
         // .insert_resource(AutoTimer::default())
@@ -82,6 +82,7 @@ struct TileBundle {
     /// Rapier collider component. We'll mark this as sensor and won't add a rigidbody to this
     /// entity because we don't actually want the physics engine to move itl.
     collider: Collider,
+    collision_groups: CollisionGroups,
     /// The game participant that owns this tile.
     owner: Participant,
 }
@@ -99,6 +100,10 @@ impl TileBundle {
                 ..default()
             },
             collider: Collider::cuboid(0.5, 0.5),
+            collision_groups: CollisionGroups::new(
+                collision_groups::tile(owner),
+                collision_groups::all_bullets_except(owner),
+            ),
             owner,
         }
     }
@@ -173,6 +178,7 @@ struct BulletBundle {
     charge: Charge,
     /// Rapier collider component.
     collider: Collider,
+    collision_groups: CollisionGroups,
     collider_scale: ColliderScale,
     velocity: Velocity,
     /// Rapier rigidbody component, used by the physics engine to move the entity.
@@ -210,6 +216,13 @@ impl BulletBundle {
                 ActiveEvents::COLLISION_EVENTS,
             ),
             collider: Collider::ball(1.0),
+            collision_groups: CollisionGroups::new(
+                collision_groups::bullet(owner),
+                collision_groups::BATTLEFIELD_ROOT
+                    | collision_groups::ALL_BULLETS
+                    | collision_groups::all_tiles_except(owner)
+                    | collision_groups::all_turrets_except(owner),
+            ),
             collider_scale: ColliderScale::Absolute(Vect::splat(1.0)),
             velocity: Velocity::default(),
             rigidbody: RigidBody::Dynamic,
@@ -243,6 +256,7 @@ struct TurretBundle {
     text_bundle: Text2dBundle,
     owner: Participant,
     collider: Collider,
+    collision_groups: CollisionGroups,
     collider_scale: ColliderScale,
 }
 impl TurretBundle {
@@ -253,6 +267,10 @@ impl TurretBundle {
             charge: Charge::from(ball),
             platform: TurretPlatformLink(platform),
             collider: Collider::ball(1.0),
+            collision_groups: CollisionGroups::new(
+                collision_groups::turret(owner),
+                collision_groups::all_bullets_except(owner),
+            ),
             collider_scale: ColliderScale::Absolute(Vect::splat(1.0)),
             text_bundle: Text2dBundle {
                 transform: Transform::from_xyz(x, y, BULLET_TEXT_Z),
@@ -338,6 +356,10 @@ fn setup(
             Name::new("Battlefield Root"),
             BattlefieldRoot,
             RigidBody::Fixed,
+            CollisionGroups::new(
+                collision_groups::BATTLEFIELD_ROOT,
+                collision_groups::ALL_BULLETS,
+            ),
             Collider::polyline(
                 vec![
                     Vect::new(BATTLEFIELD_BOUNDARY, BATTLEFIELD_BOUNDARY),
@@ -511,14 +533,6 @@ fn handle_trigger_events(
         }
     }
 }
-fn update_tile_color(
-    colors: Res<ParticipantMap<Color>>,
-    mut tiles: Query<(&Participant, &mut Sprite), (With<Tile>, Changed<Participant>)>,
-) {
-    for (&owner, mut sprite) in &mut tiles {
-        sprite.color = *colors.get(owner);
-    }
-}
 fn handle_bullet_turret_collision(
     mut commands: Commands,
     mut events: EventReader<CollisionEvent>,
@@ -582,8 +596,12 @@ fn handle_bullet_turret_collision(
 }
 fn handle_bullet_tile_collision(
     mut events: EventReader<CollisionEvent>,
+    colors: Res<ParticipantMap<Color>>,
     mut bullet_query: Query<(&Participant, &mut Charge), With<Bullet>>,
-    mut tile_query: Query<&mut Participant, (With<Tile>, Without<Bullet>)>,
+    mut tile_query: Query<
+        (&mut Participant, &mut Sprite, &mut CollisionGroups),
+        (With<Tile>, Without<Bullet>),
+    >,
 ) {
     for event in events.read() {
         match event {
@@ -595,13 +613,14 @@ fn handle_bullet_tile_collision(
                 } else {
                     continue;
                 };
-                let mut tile_owner = if let Ok(x) = tile_query.get_mut(a) {
-                    x
-                } else if let Ok(x) = tile_query.get_mut(b) {
-                    x
-                } else {
-                    continue;
-                };
+                let (mut tile_owner, mut sprite, mut collision_group) =
+                    if let Ok(x) = tile_query.get_mut(a) {
+                        x
+                    } else if let Ok(x) = tile_query.get_mut(b) {
+                        x
+                    } else {
+                        continue;
+                    };
                 if bullet_owner == *tile_owner {
                     continue;
                 }
@@ -609,6 +628,11 @@ fn handle_bullet_tile_collision(
                     continue;
                 }
                 *tile_owner = bullet_owner;
+                sprite.color = *colors.get(bullet_owner);
+                *collision_group = CollisionGroups::new(
+                    collision_groups::tile(bullet_owner),
+                    collision_groups::all_bullets_except(bullet_owner),
+                );
                 charge.value -= 1.0;
             }
             CollisionEvent::Stopped(_, _, _) => (),
