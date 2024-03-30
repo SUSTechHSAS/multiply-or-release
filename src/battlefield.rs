@@ -1,6 +1,9 @@
 #![allow(clippy::type_complexity, clippy::too_many_arguments)]
 
-use std::f32::consts::{FRAC_PI_2, PI};
+use std::{
+    collections::VecDeque,
+    f32::consts::{FRAC_PI_2, PI},
+};
 
 use bevy::{prelude::*, sprite::Mesh2dHandle, time::Stopwatch};
 use bevy_rapier2d::prelude::*;
@@ -49,18 +52,20 @@ const TURRET_PLATFORM_Z: f32 = -1.0;
 pub struct BattlefieldPlugin;
 impl Plugin for BattlefieldPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(Startup, setup).add_systems(
-            Update,
-            (
-                rotate_turret,
-                handle_trigger_events.after(handle_bullet_turret_collision),
-                handle_bullet_tile_collision,
-                handle_bullet_turret_collision.after(handle_bullet_tile_collision),
-                update_charge_level.after(handle_bullet_turret_collision),
-                update_charge_text.after(update_charge_level),
-                update_charge_ball.after(update_charge_level),
-            ),
-        );
+        app.add_systems(Startup, setup)
+            .add_systems(
+                Update,
+                (
+                    rotate_turret,
+                    handle_trigger_events.after(handle_bullet_turret_collision),
+                    handle_bullet_tile_collision,
+                    handle_bullet_turret_collision.after(handle_bullet_tile_collision),
+                    update_charge_level.after(handle_bullet_turret_collision),
+                    update_charge_text.after(update_charge_level),
+                    update_charge_ball.after(update_charge_level),
+                ),
+            )
+            .add_systems(FixedUpdate, fire_shots.after(handle_trigger_events));
         // .insert_resource(AutoTimer::default())
         // .add_systems(Update, auto_fire);
     }
@@ -163,7 +168,7 @@ impl ChargeBallBundle {
         }
     }
 }
-#[derive(Resource)]
+#[derive(Resource, Deref)]
 struct BulletMesh(Mesh2dHandle);
 #[derive(Component)]
 struct Bullet;
@@ -252,11 +257,12 @@ impl BulletBundle {
         }
     }
 }
-#[derive(Component, Default)]
-struct Turret;
+#[derive(Component, Default, Deref, DerefMut)]
+struct FiringQueue(VecDeque<Charge>);
 #[derive(Bundle)]
 struct TurretBundle {
-    marker: (Turret, Sensor),
+    sensor: Sensor,
+    firing_queue: FiringQueue,
     charge: Charge,
     link: ChargeBallLink,
     platform: TurretPlatformLink,
@@ -269,8 +275,9 @@ struct TurretBundle {
 impl TurretBundle {
     fn new(owner: Participant, x: f32, y: f32, ball: Entity, platform: Entity) -> Self {
         Self {
-            marker: (Turret, Sensor),
             owner,
+            sensor: Sensor,
+            firing_queue: FiringQueue::default(),
             charge: Charge::default(),
             link: ChargeBallLink(ball),
             platform: TurretPlatformLink(platform),
@@ -327,7 +334,6 @@ impl TurretHeadBundle {
     }
 }
 #[derive(Component)]
-#[allow(dead_code)]
 struct TurretPlatformLink(Entity);
 /// Component for a turret.
 #[derive(Component, Default)]
@@ -498,21 +504,69 @@ fn update_charge_ball(
         ball_transform.scale.y = scale;
     }
 }
-fn handle_trigger_events(
+fn fire_shots(
     mut commands: Commands,
-    mut reader: EventReader<TriggerEvent>,
-    participants: Res<ParticipantMap<Entity>>,
+    rapier: Res<RapierContext>,
     mesh: Res<BulletMesh>,
     materials: Res<ParticipantMap<Handle<ColorMaterial>>>,
     turret_stopwatch: Res<TurretStopwatch>,
-    mut turret_query: Query<(&mut Charge, &Transform, &TurretPlatformLink), With<Turret>>,
+    mut turrets: Query<(
+        &mut FiringQueue,
+        &Transform,
+        &GlobalTransform,
+        &Participant,
+        &TurretPlatformLink,
+    )>,
     platform_query: Query<&BarrelOffset>,
-    root: Query<Entity, With<BattlefieldRoot>>,
+    battlefield_root: Query<Entity, With<BattlefieldRoot>>,
+) {
+    for (mut turret, transform, global_transform, &owner, &TurretPlatformLink(link)) in &mut turrets
+    {
+        let Some(charge) = turret.pop_back() else {
+            continue;
+        };
+        if rapier
+            .intersection_with_shape(
+                global_transform.translation().xy(),
+                0.0,
+                &Collider::ball(charge.get_scale()),
+                QueryFilter::only_dynamic().groups(CollisionGroups::new(
+                    collision_groups::bullet(owner),
+                    collision_groups::ALL_BULLETS,
+                )),
+            )
+            .is_some()
+        {
+            continue;
+        }
+        let &BarrelOffset(base_angle) = platform_query.get(link).unwrap();
+        let ball = commands
+            .spawn(ChargeBallBundle::new(
+                mesh.clone(),
+                materials.get(owner).clone(),
+            ))
+            .id();
+        commands
+            .spawn(BulletBundle::new(
+                owner,
+                transform.translation.x,
+                transform.translation.y,
+                ball,
+                charge,
+                turret_stopwatch.get() + base_angle,
+            ))
+            .set_parent(battlefield_root.single())
+            .add_child(ball);
+    }
+}
+fn handle_trigger_events(
+    mut reader: EventReader<TriggerEvent>,
+    participants: Res<ParticipantMap<Entity>>,
+    mut turret_query: Query<(&mut Charge, &mut FiringQueue)>,
 ) {
     for event in reader.read() {
         let &entity = participants.get(event.participant);
-        let Ok((mut charge, transform, &TurretPlatformLink(link))) = turret_query.get_mut(entity)
-        else {
+        let Ok((mut charge, mut turret)) = turret_query.get_mut(entity) else {
             continue;
         };
         match event.trigger_type {
@@ -521,24 +575,7 @@ fn handle_trigger_events(
                 println!("burst shot is not implemented yet");
             }
             TriggerType::ChargedShot => {
-                let &BarrelOffset(base_angle) = platform_query.get(link).unwrap();
-                let ball = commands
-                    .spawn(ChargeBallBundle::new(
-                        mesh.0.clone(),
-                        materials.get(event.participant).clone(),
-                    ))
-                    .id();
-                commands
-                    .spawn(BulletBundle::new(
-                        event.participant,
-                        transform.translation.x,
-                        transform.translation.y,
-                        ball,
-                        *charge,
-                        turret_stopwatch.get() + base_angle,
-                    ))
-                    .set_parent(root.single())
-                    .add_child(ball);
+                turret.push_front(*charge);
                 charge.reset();
             }
         }
@@ -548,7 +585,7 @@ fn handle_bullet_turret_collision(
     mut commands: Commands,
     mut events: EventReader<CollisionEvent>,
     mut bullet_query: Query<(Entity, &Participant, &mut Charge, &mut Velocity), With<Bullet>>,
-    mut turret_query: Query<(&Participant, &mut Charge), (With<Turret>, Without<Bullet>)>,
+    mut turret_query: Query<(&Participant, &mut Charge), (With<FiringQueue>, Without<Bullet>)>,
     participant_entity_query: Query<(Entity, &Participant), Without<Tile>>,
 ) {
     for event in events.read() {
