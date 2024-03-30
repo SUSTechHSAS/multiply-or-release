@@ -13,9 +13,9 @@ use crate::{
 // Constants {{{
 
 const TILE_BORDER_COLOR: Color = Color::BLACK;
-const TILE_BORDER_THICNESS: f32 = 1.0;
-const TILE_COUNT: usize = 40;
-const TILE_DIMENSION: f32 = 8.0;
+const TILE_BORDER_THICNESS: f32 = 0.4;
+const TILE_COUNT: usize = 100;
+const TILE_DIMENSION: f32 = 3.2;
 
 const BATTLEFIELD_BOUNDARY: f32 = TILE_COUNT as f32 * (TILE_DIMENSION + TILE_BORDER_THICNESS);
 
