@@ -29,6 +29,12 @@ const TURRET_HEAD_THICNESS: f32 = 2.5;
 const TURRET_HEAD_LENGTH: f32 = 75.0;
 const TURRET_ROTATION_SPEED: f32 = 1.0;
 
+const MULTI_SHOT_CHARGE_THRESHOLD_0: f32 = 64.0; // Fire shots of 1s
+const MULTI_SHOT_CHARGE_THRESHOLD_1: f32 = 128.0; // Fire shots of 2s
+const MULTI_SHOT_CHARGE_THRESHOLD_2: f32 = 512.0; // Fire shots of 3s
+const MULTI_SHOT_CHARGE_THRESHOLD_3: f32 = 1024.0; // Fire shots of 4s
+const MULTI_SHOT_CHARGE_THRESHOLD_4: f32 = 2048.0; // Fire shots of 5s
+
 const BULLET_TEXT_COLOR: Color = Color::BLACK;
 const BULLET_TEXT_FONT_SIZE_ASPECT: f32 = 0.5;
 const BULLET_RADIUS_FACTOR: f32 = 5.0;
@@ -257,8 +263,13 @@ impl BulletBundle {
         }
     }
 }
+#[derive(Debug, Clone, Copy)]
+enum ShotType {
+    Charged,
+    Multi,
+}
 #[derive(Component, Default, Deref, DerefMut)]
-struct FiringQueue(VecDeque<Charge>);
+struct FiringQueue(VecDeque<(ShotType, Charge)>);
 #[derive(Bundle)]
 struct TurretBundle {
     sensor: Sensor,
@@ -522,23 +533,58 @@ fn fire_shots(
 ) {
     for (mut turret, transform, global_transform, &owner, &TurretPlatformLink(link)) in &mut turrets
     {
-        let Some(charge) = turret.pop_back() else {
+        let Some((shot_type, charge)) = turret.pop_back() else {
             continue;
         };
-        if rapier
-            .intersection_with_shape(
-                global_transform.translation().xy(),
-                0.0,
-                &Collider::ball(charge.get_scale()),
-                QueryFilter::only_dynamic().groups(CollisionGroups::new(
-                    collision_groups::bullet(owner),
-                    collision_groups::ALL_BULLETS,
-                )),
-            )
-            .is_some()
-        {
-            continue;
-        }
+        let shape_cast = |charge: Charge| {
+            rapier
+                .intersection_with_shape(
+                    global_transform.translation().xy(),
+                    0.0,
+                    &Collider::ball(charge.get_scale()),
+                    QueryFilter::only_dynamic().groups(CollisionGroups::new(
+                        collision_groups::bullet(owner),
+                        collision_groups::ALL_BULLETS,
+                    )),
+                )
+                .is_some()
+        };
+        let charge = match shot_type {
+            ShotType::Charged => {
+                if shape_cast(charge) {
+                    turret.push_back((shot_type, charge));
+                    continue;
+                } else {
+                    charge
+                }
+            }
+            ShotType::Multi => {
+                let shot = if charge.value < MULTI_SHOT_CHARGE_THRESHOLD_0 {
+                    Charge::new(1.0, 1.0)
+                } else if charge.value < MULTI_SHOT_CHARGE_THRESHOLD_1 {
+                    Charge::new(2.0, 2.0)
+                } else if charge.value < MULTI_SHOT_CHARGE_THRESHOLD_2 {
+                    Charge::new(3.0, 2.0)
+                } else if charge.value < MULTI_SHOT_CHARGE_THRESHOLD_3 {
+                    Charge::new(4.0, 3.0)
+                } else if charge.value < MULTI_SHOT_CHARGE_THRESHOLD_4 {
+                    Charge::new(5.0, 3.0)
+                } else {
+                    Charge::new(6.0, 3.0)
+                };
+                if shape_cast(shot) {
+                    turret.push_back((shot_type, charge));
+                    continue;
+                } else {
+                    let mut charge = charge;
+                    charge.value -= shot.value;
+                    if charge.value > 0.0 {
+                        turret.push_back((shot_type, charge));
+                    }
+                    shot
+                }
+            }
+        };
         let &BarrelOffset(base_angle) = platform_query.get(link).unwrap();
         let ball = commands
             .spawn(ChargeBallBundle::new(
@@ -572,10 +618,11 @@ fn handle_trigger_events(
         match event.trigger_type {
             TriggerType::Multiply => charge.multiply(),
             TriggerType::BurstShot => {
-                println!("burst shot is not implemented yet");
+                turret.push_front((ShotType::Multi, *charge));
+                charge.reset();
             }
             TriggerType::ChargedShot => {
-                turret.push_front(*charge);
+                turret.push_front((ShotType::Charged, *charge));
                 charge.reset();
             }
         }
