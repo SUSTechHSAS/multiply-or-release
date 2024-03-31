@@ -37,7 +37,8 @@ const MULTI_SHOT_CHARGE_THRESHOLD_4: f32 = 2048.0; // Fire shots of 5s
 
 const BULLET_TEXT_COLOR: Color = Color::BLACK;
 const BULLET_TEXT_FONT_SIZE_ASPECT: f32 = 0.5;
-const BULLET_RADIUS_FACTOR: f32 = 5.0;
+const BULLET_MINIMUM_TEXT_SIZE: f32 = 8.0;
+const BULLET_SIZE_FACTOR: f32 = 2.0;
 const BULLET_FIRE_FORCE: f32 = 100.0;
 const BULLET_MASS_FACTOR: f32 = 1.0;
 const BULLET_RESTITUTION_COEFFICIENT: f32 = 0.75;
@@ -68,7 +69,6 @@ impl Plugin for BattlefieldPlugin {
                     handle_bullet_tile_collision,
                     handle_bullet_turret_collision.after(handle_bullet_tile_collision),
                     update_charge_level.after(handle_bullet_turret_collision),
-                    update_charge_text.after(update_charge_level),
                     update_charge_ball.after(update_charge_level),
                 ),
             )
@@ -155,7 +155,7 @@ impl Charge {
         self.level = 1.0;
     }
     fn get_scale(&self) -> f32 {
-        self.level * BULLET_RADIUS_FACTOR
+        self.level * BULLET_SIZE_FACTOR
     }
 }
 #[derive(Bundle)]
@@ -249,7 +249,7 @@ impl BulletBundle {
                     "",
                     TextStyle {
                         font: Default::default(),
-                        font_size: BULLET_RADIUS_FACTOR,
+                        font_size: BULLET_SIZE_FACTOR,
                         color: BULLET_TEXT_COLOR,
                     },
                 ),
@@ -299,7 +299,7 @@ impl TurretBundle {
                     "",
                     TextStyle {
                         font: Default::default(),
-                        font_size: BULLET_RADIUS_FACTOR,
+                        font_size: BULLET_SIZE_FACTOR,
                         color: BULLET_TEXT_COLOR,
                     },
                 ),
@@ -483,35 +483,43 @@ fn update_charge_level(
         }
     }
 }
-fn update_charge_text(
-    mut query: Query<(&mut Text, &Charge), Or<(Changed<Charge>, Added<Charge>)>>,
-) {
-    for (mut text, charge) in &mut query {
-        let section = &mut text.sections[0];
-        section.value = charge.value.to_string();
-        let digit_count = section.value.len() as f32;
-        let diameter = charge.level * BULLET_RADIUS_FACTOR * 2.0;
-        let full_size_horizontal = diameter * BULLET_TEXT_FONT_SIZE_ASPECT * digit_count;
-        if diameter < full_size_horizontal {
-            section.style.font_size = diameter / digit_count / BULLET_TEXT_FONT_SIZE_ASPECT;
-        } else {
-            section.style.font_size = diameter;
-        }
-    }
-}
 fn update_charge_ball(
-    mut turrets: Query<
-        (&mut ColliderScale, &Charge, &ChargeBallLink),
+    mut balls: Query<
+        (
+            &mut ColliderScale,
+            &mut Text,
+            &Charge,
+            &ChargeBallLink,
+            Entity,
+        ),
         Or<(Changed<Charge>, Added<Charge>)>,
     >,
+    turret_query: Query<(), With<FiringQueue>>,
     mut transform_query: Query<&mut Transform>,
 ) {
-    for (mut collider_scale, charge, &ChargeBallLink(link)) in &mut turrets {
-        let scale = charge.get_scale();
+    for (mut collider_scale, mut text, charge, &ChargeBallLink(link), entity) in &mut balls {
+        let mut scale = charge.get_scale();
+        if scale < BULLET_MINIMUM_TEXT_SIZE && turret_query.get(entity).is_ok() {
+            scale = BULLET_MINIMUM_TEXT_SIZE;
+        }
         *collider_scale = ColliderScale::Absolute(Vect::splat(scale));
         let mut ball_transform = transform_query.get_mut(link).unwrap();
         ball_transform.scale.x = scale;
         ball_transform.scale.y = scale;
+        let diameter = scale * 2.0;
+        let section = &mut text.sections[0];
+        if diameter < BULLET_MINIMUM_TEXT_SIZE {
+            section.value.clear();
+        } else {
+            section.value = charge.value.to_string();
+            let digit_count = section.value.len() as f32;
+            let full_size_horizontal = diameter * BULLET_TEXT_FONT_SIZE_ASPECT * digit_count;
+            if diameter < full_size_horizontal {
+                section.style.font_size = diameter / digit_count / BULLET_TEXT_FONT_SIZE_ASPECT;
+            } else {
+                section.style.font_size = diameter;
+            }
+        }
     }
 }
 fn fire_shots(
@@ -540,7 +548,7 @@ fn fire_shots(
                 .intersection_with_shape(
                     global_transform.translation().xy(),
                     0.0,
-                    &Collider::ball(charge.get_scale()),
+                    &Collider::ball(charge.level * BULLET_SIZE_FACTOR),
                     QueryFilter::only_dynamic().groups(CollisionGroups::new(
                         collision_groups::bullet(owner),
                         collision_groups::ALL_BULLETS,
