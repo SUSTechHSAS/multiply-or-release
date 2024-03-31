@@ -17,11 +17,9 @@ use crate::{
 // Constants {{{
 
 const TILE_BORDER_COLOR: Color = Color::BLACK;
-const TILE_BORDER_THICNESS: f32 = 0.4;
 const TILE_COUNT: usize = 100;
-const TILE_DIMENSION: f32 = 3.2;
-
-const BATTLEFIELD_BOUNDARY: f32 = TILE_COUNT as f32 * (TILE_DIMENSION + TILE_BORDER_THICNESS);
+const BATTLEFIELD_BOUNDARY: f32 = 360.0;
+const TILE_DIMENSION: f32 = BATTLEFIELD_BOUNDARY / TILE_COUNT as f32;
 
 const TURRET_POSITION: f32 = 350.0;
 const TURRET_HEAD_COLOR: Color = Color::DARK_GRAY;
@@ -408,11 +406,9 @@ fn setup(
         .set_parent(root)
         .id();
     for i in 0..TILE_COUNT {
-        let x = (TILE_DIMENSION + TILE_BORDER_THICNESS) / 2.0
-            + i as f32 * (TILE_DIMENSION + TILE_BORDER_THICNESS);
+        let x = TILE_DIMENSION / 2.0 + i as f32 * TILE_DIMENSION;
         for j in 0..TILE_COUNT {
-            let y = (TILE_DIMENSION + TILE_BORDER_THICNESS) / 2.0
-                + j as f32 * (TILE_DIMENSION + TILE_BORDER_THICNESS);
+            let y = TILE_DIMENSION / 2.0 + j as f32 * TILE_DIMENSION;
             commands
                 .spawn(TileBundle::new(Participant::A, colors.a, x, y))
                 .set_parent(battlefield);
