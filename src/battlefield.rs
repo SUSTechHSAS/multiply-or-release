@@ -37,10 +37,14 @@ const BULLET_TEXT_COLOR: Color = Color::BLACK;
 const BULLET_TEXT_FONT_SIZE_ASPECT: f32 = 0.5;
 const BULLET_MINIMUM_TEXT_SIZE: f32 = 8.0;
 const BULLET_SIZE_FACTOR: f32 = 2.0;
-const BULLET_FIRING_VELOCITY: f32 = 150.0;
-const BULLET_FIRING_VELOCITY_SLOWDOWN_FACTOR: f32 = 0.9;
 const BULLET_MASS_FACTOR: f32 = 1.0;
 const BULLET_RESTITUTION_COEFFICIENT: f32 = 0.75;
+// Bullet firing speed is given by max(a * b ^ (x / c), d) where x is the `charge.value` of the
+// bullet and a, b, c, d are:
+const BULLET_FIRING_VELOCITY: f32 = 150.0; // a
+const BULLET_FIRING_VELOCITY_SLOWDOWN_FACTOR: f32 = 0.985; // b
+const BULLET_FIRING_CHARGE_DIVISOR: f32 = 100.0; // c
+const BULLET_FIRING_VELOCITY_MIN: f32 = 75.0; // d
 
 const ONE_SHOT_PROTECTION_THRESHOLD: f32 = 10.0;
 const ONE_SHOT_DAMAGE_THRESHOLD: f32 = 1024.0;
@@ -215,6 +219,12 @@ impl BulletBundle {
         charge: Charge,
         firing_angle: f32,
     ) -> Self {
+        let speed = BULLET_FIRING_VELOCITY_MIN.max(
+            BULLET_FIRING_VELOCITY
+                * BULLET_FIRING_VELOCITY_SLOWDOWN_FACTOR
+                    .powi((charge.value / BULLET_FIRING_CHARGE_DIVISOR) as i32),
+        );
+        let direction = Vec2::from_angle(firing_angle);
         Self {
             owner,
             charge,
@@ -242,11 +252,7 @@ impl BulletBundle {
                     | collision_groups::all_turrets_except(owner),
             ),
             collider_scale: ColliderScale::Absolute(Vect::splat(1.0)),
-            velocity: Velocity::linear(
-                BULLET_FIRING_VELOCITY
-                    * BULLET_FIRING_VELOCITY_SLOWDOWN_FACTOR.powi(charge.level as i32)
-                    * Vec2::from_angle(firing_angle),
-            ),
+            velocity: Velocity::linear(direction * speed),
             rigidbody: RigidBody::Dynamic,
             mass: ColliderMassProperties::Mass(charge.value * BULLET_MASS_FACTOR),
             text_bundle: Text2dBundle {
