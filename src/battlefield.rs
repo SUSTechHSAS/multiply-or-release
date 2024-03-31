@@ -29,9 +29,9 @@ const TURRET_ROTATION_SPEED: f32 = 1.0;
 
 const MULTI_SHOT_CHARGE_THRESHOLD_0: f32 = 64.0; // Fire shots of 1s
 const MULTI_SHOT_CHARGE_THRESHOLD_1: f32 = 128.0; // Fire shots of 2s
-const MULTI_SHOT_CHARGE_THRESHOLD_2: f32 = 512.0; // Fire shots of 3s
-const MULTI_SHOT_CHARGE_THRESHOLD_3: f32 = 1024.0; // Fire shots of 4s
-const MULTI_SHOT_CHARGE_THRESHOLD_4: f32 = 2048.0; // Fire shots of 5s
+const MULTI_SHOT_CHARGE_THRESHOLD_2: f32 = 256.0; // Fire shots of 3s
+const MULTI_SHOT_CHARGE_THRESHOLD_3: f32 = 512.0; // Fire shots of 4s
+const MULTI_SHOT_CHARGE_THRESHOLD_4: f32 = 1024.0; // Fire shots of 5s
 
 const BULLET_TEXT_COLOR: Color = Color::BLACK;
 const BULLET_TEXT_FONT_SIZE_ASPECT: f32 = 0.5;
@@ -142,6 +142,10 @@ impl Default for Charge {
 }
 impl Charge {
     fn new(value: f32, level: f32) -> Self {
+        Self { value, level }
+    }
+    fn from_value(value: f32) -> Self {
+        let level = value.log2().ceil() + 1.0;
         Self { value, level }
     }
     fn multiply(&mut self) {
@@ -573,7 +577,7 @@ fn fire_shots(
                 } else if charge.value < MULTI_SHOT_CHARGE_THRESHOLD_4 {
                     Charge::new(5.0, 3.0)
                 } else {
-                    Charge::new(6.0, 3.0)
+                    Charge::from_value((charge.value / 100.0).ceil())
                 };
                 if shape_cast(shot) {
                     turret.push_back((shot_type, charge));
