@@ -40,6 +40,7 @@ const BULLET_TEXT_FONT_SIZE_ASPECT: f32 = 0.5;
 const BULLET_RADIUS_FACTOR: f32 = 5.0;
 const BULLET_FIRE_FORCE: f32 = 100.0;
 const BULLET_MASS_FACTOR: f32 = 1.0;
+const BULLET_RESTITUTION_COEFFICIENT: f32 = 0.75;
 
 const ONE_SHOT_PROTECTION_THRESHOLD: f32 = 10.0;
 const ONE_SHOT_DAMAGE_THRESHOLD: f32 = 1024.0;
@@ -199,7 +200,6 @@ struct BulletBundle {
     /// Rapier rigidbody component, used by the physics engine to move the entity.
     rigidbody: RigidBody,
     mass: ColliderMassProperties,
-    impulse: ExternalImpulse,
     /// The game participant that owns this bullet.
     owner: Participant,
     text_bundle: Text2dBundle,
@@ -225,7 +225,7 @@ impl BulletBundle {
                     combine_rule: CoefficientCombineRule::Min,
                 },
                 Restitution {
-                    coefficient: 1.0,
+                    coefficient: BULLET_RESTITUTION_COEFFICIENT,
                     combine_rule: CoefficientCombineRule::Max,
                 },
                 LockedAxes::ROTATION_LOCKED,
@@ -240,13 +240,9 @@ impl BulletBundle {
                     | collision_groups::all_turrets_except(owner),
             ),
             collider_scale: ColliderScale::Absolute(Vect::splat(1.0)),
-            velocity: Velocity::default(),
+            velocity: Velocity::linear(Vec2::from_angle(firing_angle) * BULLET_FIRE_FORCE),
             rigidbody: RigidBody::Dynamic,
-            mass: ColliderMassProperties::Mass(charge.level * BULLET_MASS_FACTOR),
-            impulse: ExternalImpulse {
-                impulse: Vec2::from_angle(firing_angle) * BULLET_FIRE_FORCE,
-                torque_impulse: 0.0,
-            },
+            mass: ColliderMassProperties::Mass(charge.value * BULLET_MASS_FACTOR),
             text_bundle: Text2dBundle {
                 transform: Transform::from_xyz(x, y, BULLET_TEXT_Z),
                 text: Text::from_section(
@@ -384,6 +380,10 @@ fn setup(
                 collision_groups::BATTLEFIELD_ROOT,
                 collision_groups::ALL_BULLETS,
             ),
+            Restitution {
+                coefficient: 1.0,
+                combine_rule: CoefficientCombineRule::Max,
+            },
             Collider::polyline(
                 vec![
                     Vect::new(BATTLEFIELD_BOUNDARY, BATTLEFIELD_BOUNDARY),
