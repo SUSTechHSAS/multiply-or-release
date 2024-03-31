@@ -10,6 +10,7 @@ bevy = { version = "0.13.0", features = ["dynamic_linking"] }
 bevy-inspector-egui = "0.23.3"
 bevy_rapier2d = "0.25.0"
 rand = "0.8.5"
+tracing = "0.1.40"
 
 # Enable a small amount of optimization in debug mode
 [profile.dev]

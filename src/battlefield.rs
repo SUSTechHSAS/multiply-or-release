@@ -5,7 +5,7 @@ use std::{
     f32::consts::{FRAC_PI_2, PI},
 };
 
-use bevy::{prelude::*, sprite::Mesh2dHandle, time::Stopwatch};
+use bevy::{prelude::*, sprite::Mesh2dHandle, time::Stopwatch, utils::tracing::instrument};
 use bevy_rapier2d::prelude::*;
 
 use crate::{
@@ -132,7 +132,7 @@ impl TurretStopwatch {
 }
 #[derive(Component, Deref, Clone, Copy)]
 struct ChargeBallLink(Entity);
-#[derive(Component, Clone, Copy)]
+#[derive(Debug, Component, Clone, Copy)]
 struct Charge {
     value: f32,
     level: f32,
@@ -212,6 +212,7 @@ struct BulletBundle {
     text_bundle: Text2dBundle,
 }
 impl BulletBundle {
+    #[instrument(level = "debug")]
     fn new(
         owner: Participant,
         position: Vec2,
@@ -225,6 +226,7 @@ impl BulletBundle {
                     .powi((charge.value / BULLET_FIRING_CHARGE_DIVISOR) as i32),
         );
         let direction = Vec2::from_angle(firing_angle);
+        debug!(speed = speed, direction_vector = ?direction);
         Self {
             owner,
             charge,

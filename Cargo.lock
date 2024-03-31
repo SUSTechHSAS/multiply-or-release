@@ -3579,6 +3579,7 @@ dependencies = [
  "bevy-inspector-egui",
  "bevy_rapier2d",
  "rand",
+ "tracing",
 ]
 
 [[package]]
