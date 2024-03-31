@@ -37,7 +37,8 @@ const BULLET_TEXT_COLOR: Color = Color::BLACK;
 const BULLET_TEXT_FONT_SIZE_ASPECT: f32 = 0.5;
 const BULLET_MINIMUM_TEXT_SIZE: f32 = 8.0;
 const BULLET_SIZE_FACTOR: f32 = 2.0;
-const BULLET_FIRE_FORCE: f32 = 100.0;
+const BULLET_FIRING_VELOCITY: f32 = 150.0;
+const BULLET_FIRING_VELOCITY_SLOWDOWN_FACTOR: f32 = 0.9;
 const BULLET_MASS_FACTOR: f32 = 1.0;
 const BULLET_RESTITUTION_COEFFICIENT: f32 = 0.75;
 
@@ -242,7 +243,11 @@ impl BulletBundle {
                     | collision_groups::all_turrets_except(owner),
             ),
             collider_scale: ColliderScale::Absolute(Vect::splat(1.0)),
-            velocity: Velocity::linear(Vec2::from_angle(firing_angle) * BULLET_FIRE_FORCE),
+            velocity: Velocity::linear(
+                BULLET_FIRING_VELOCITY
+                    * BULLET_FIRING_VELOCITY_SLOWDOWN_FACTOR.powi(charge.level as i32)
+                    * Vec2::from_angle(firing_angle),
+            ),
             rigidbody: RigidBody::Dynamic,
             mass: ColliderMassProperties::Mass(charge.value * BULLET_MASS_FACTOR),
             text_bundle: Text2dBundle {
