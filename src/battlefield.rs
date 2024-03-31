@@ -645,7 +645,7 @@ fn handle_bullet_turret_collision(
     mut events: EventReader<CollisionEvent>,
     mut bullet_query: Query<(Entity, &Participant, &mut Charge, &mut Velocity), With<Bullet>>,
     mut turret_query: Query<(&Participant, &mut Charge), (With<FiringQueue>, Without<Bullet>)>,
-    participant_entity_query: Query<(Entity, &Participant), Without<Tile>>,
+    participant_entity_query: Query<(Entity, &Participant), (Without<Tile>, Without<Bullet>)>,
 ) {
     for event in events.read() {
         match event {
