@@ -3,7 +3,9 @@ use bevy::prelude::*;
 // Constants {{{
 
 const PARTICIPANT_COLORS: ParticipantMap<Color> =
-    ParticipantMap::new(Color::RED, Color::GREEN, Color::PURPLE, Color::ORANGE);
+    ParticipantMap::new(Color::MAROON, Color::DARK_GREEN, Color::PURPLE, Color::GOLD);
+const BALL_COLORS: ParticipantMap<Color> =
+    ParticipantMap::new(Color::RED, Color::GREEN, Color::VIOLET, Color::YELLOW);
 
 // }}}
 
@@ -62,5 +64,5 @@ pub enum Participant {
 
 fn setup(mut commands: Commands, mut materials: ResMut<Assets<ColorMaterial>>) {
     commands.insert_resource(PARTICIPANT_COLORS);
-    commands.insert_resource(PARTICIPANT_COLORS.map(|color| materials.add(color)));
+    commands.insert_resource(BALL_COLORS.map(|color| materials.add(color)));
 }
