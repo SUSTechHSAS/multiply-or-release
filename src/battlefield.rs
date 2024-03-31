@@ -210,8 +210,7 @@ struct BulletBundle {
 impl BulletBundle {
     fn new(
         owner: Participant,
-        x: f32,
-        y: f32,
+        position: Vec2,
         ball: Entity,
         charge: Charge,
         firing_angle: f32,
@@ -251,7 +250,7 @@ impl BulletBundle {
             rigidbody: RigidBody::Dynamic,
             mass: ColliderMassProperties::Mass(charge.value * BULLET_MASS_FACTOR),
             text_bundle: Text2dBundle {
-                transform: Transform::from_xyz(x, y, BULLET_TEXT_Z),
+                transform: Transform::from_translation(position.extend(BULLET_TEXT_Z)),
                 text: Text::from_section(
                     "",
                     TextStyle {
@@ -548,12 +547,18 @@ fn fire_shots(
         let Some((shot_type, charge)) = turret.pop_back() else {
             continue;
         };
-        let shape_cast = |charge: Charge| {
+        let get_offset = |radius: f32| {
+            let translation = transform.translation;
+            let absx = translation.x.abs();
+            let abs_offset = absx - absx.min(BATTLEFIELD_BOUNDARY - radius);
+            Vec2::new(translation.x.signum(), translation.y.signum()) * abs_offset
+        };
+        let shape_cast = |radius: f32, offset: Vec2| {
             rapier
                 .intersection_with_shape(
-                    global_transform.translation().xy(),
+                    global_transform.translation().xy() - offset,
                     0.0,
-                    &Collider::ball(charge.level * BULLET_SIZE_FACTOR),
+                    &Collider::ball(radius),
                     QueryFilter::only_dynamic().groups(CollisionGroups::new(
                         collision_groups::bullet(owner),
                         collision_groups::ALL_BULLETS,
@@ -561,13 +566,15 @@ fn fire_shots(
                 )
                 .is_some()
         };
-        let charge = match shot_type {
+        let (charge, offset) = match shot_type {
             ShotType::Charged => {
-                if shape_cast(charge) {
+                let radius = charge.get_scale();
+                let offset = get_offset(radius);
+                if shape_cast(radius, offset) {
                     turret.push_back((shot_type, charge));
                     continue;
                 } else {
-                    charge
+                    (charge, offset)
                 }
             }
             ShotType::Multi => {
@@ -584,7 +591,9 @@ fn fire_shots(
                 } else {
                     Charge::from_value((charge.value / 100.0).ceil())
                 };
-                if shape_cast(shot) {
+                let radius = shot.get_scale();
+                let offset = get_offset(radius);
+                if shape_cast(radius, offset) {
                     turret.push_back((shot_type, charge));
                     continue;
                 } else {
@@ -593,7 +602,7 @@ fn fire_shots(
                     if charge.value > 0.0 {
                         turret.push_back((shot_type, charge));
                     }
-                    shot
+                    (shot, offset)
                 }
             }
         };
@@ -607,8 +616,7 @@ fn fire_shots(
         commands
             .spawn(BulletBundle::new(
                 owner,
-                transform.translation.x,
-                transform.translation.y,
+                transform.translation.xy() - offset,
                 ball,
                 charge,
                 turret_stopwatch.get() + base_angle,
