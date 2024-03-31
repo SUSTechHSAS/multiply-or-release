@@ -436,15 +436,15 @@ fn setup(
             .push_children(&[ball, platform])
             .id()
     };
-    let a = spawn_turret(Participant::A, -FRAC_PI_2, TURRET_POSITION, TURRET_POSITION);
-    let b = spawn_turret(Participant::B, 0.0, -TURRET_POSITION, TURRET_POSITION);
-    let c = spawn_turret(Participant::C, PI, TURRET_POSITION, -TURRET_POSITION);
-    let d = spawn_turret(
-        Participant::D,
-        FRAC_PI_2,
+    let a = spawn_turret(Participant::A, PI, TURRET_POSITION, TURRET_POSITION);
+    let b = spawn_turret(
+        Participant::B,
+        -FRAC_PI_2,
         -TURRET_POSITION,
-        -TURRET_POSITION,
+        TURRET_POSITION,
     );
+    let c = spawn_turret(Participant::C, FRAC_PI_2, TURRET_POSITION, -TURRET_POSITION);
+    let d = spawn_turret(Participant::D, 0.0, -TURRET_POSITION, -TURRET_POSITION);
     commands.insert_resource(ParticipantMap::new(a, b, c, d));
     commands.insert_resource(BulletMesh(mesh));
 }
@@ -456,7 +456,7 @@ fn rotate_turret(
     stopwatch.0.tick(time.delta());
     let angle_offset = stopwatch.get();
     for (mut transform, &BarrelOffset(base_offset)) in &mut turrets {
-        *transform = transform.with_rotation(Quat::from_rotation_z(base_offset - angle_offset));
+        *transform = transform.with_rotation(Quat::from_rotation_z(base_offset + angle_offset));
     }
 }
 fn update_charge_level(
