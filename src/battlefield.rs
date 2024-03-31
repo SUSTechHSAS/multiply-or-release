@@ -142,7 +142,6 @@ impl Default for Charge {
     }
 }
 impl Charge {
-    #[allow(dead_code)]
     fn new(value: f32, level: f32) -> Self {
         Self { value, level }
     }
