@@ -147,8 +147,8 @@ impl Charge {
         Self { value, level }
     }
     fn multiply(&mut self) {
-        self.value *= 2.0;
-        self.level += 1.0;
+        self.value *= 4.0;
+        self.level += 2.0;
     }
     fn reset(&mut self) {
         self.value = 1.0;
