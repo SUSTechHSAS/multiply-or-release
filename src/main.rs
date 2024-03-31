@@ -1,5 +1,5 @@
 use battlefield::BattlefieldPlugin;
-use bevy::prelude::*;
+use bevy::{prelude::*, render::camera::ScalingMode};
 use bevy_inspector_egui::quick::WorldInspectorPlugin;
 use bevy_rapier2d::prelude::*;
 use panel_plugin::PanelPlugin;
@@ -31,5 +31,19 @@ fn main() {
 }
 
 fn setup(mut commands: Commands) {
-    commands.spawn((Name::new("Camera"), Camera2dBundle::default()));
+    commands.spawn((
+        Name::new("Camera"),
+        Camera2dBundle {
+            projection: OrthographicProjection {
+                far: 1000.0,
+                near: -1000.0,
+                scaling_mode: ScalingMode::AutoMin {
+                    min_width: 1280.0,
+                    min_height: 720.0,
+                },
+                ..default()
+            },
+            ..default()
+        },
+    ));
 }
