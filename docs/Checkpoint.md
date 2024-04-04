@@ -16,7 +16,9 @@ The game involves 4 participants, which each have their own color. Most implemen
 
 ## Checkpoint Progress Summary
 
-Currently, we have implemented most of the core functionality of the game. The panel where the balls fall is mostly complete other than minor alterations to asthetics, as well as any possible additions to new abilities. The battlefield is mostly complete, as turrets spawn bullets with a charge, and release them depending on triggered abilities within the panel. Bullets bounce off each other in proportion to their charge, however we are considering changing how our current implementation handles the "bounce", as it doesn't match perfectly what we are hoping for. The bullets collide with tiles of opposing colors, changing them to match the bullet owners color. Turrets change direction to aim in different directions as time progresses. When a bullet hits the turret, the turret is destroyed.
+The `main` branch is runnable. The program currently accepts no input in any way. Just use `cargo run --release` to run the simulation locally. Though be advised that the build time can be very long.
+
+Currently, we have implemented most of the core functionality of the game. The panel where the balls fall is mostly complete other than minor alterations to aesthetics, as well as any possible additions to new abilities. The battlefield is mostly complete, as turrets spawn bullets with a charge, and release them depending on triggered abilities within the panel. Bullets bounce off each other in proportion to their charge, however we are considering changing how our current implementation handles the "bounce", as it doesn't match perfectly what we are hoping for. The bullets collide with tiles of opposing colors, changing them to match the bullet owners color. Turrets change direction to aim in different directions as time progresses. When a bullet hits the turret, the turret is destroyed.
 
 Current planned features still requiring implementation:
 - Tiles darkening when a bullet matching its team color hits it
@@ -24,6 +26,10 @@ Current planned features still requiring implementation:
 - End text when all but one of the turrets have been destroyed
 - A trace like effect as the bullet moves throughout the battlefield 
 - More abilities that affect the battlefield
+
+### Experimental
+
+The `experimental` branch has a version of the program that greatly increases the number of tiles in the grid (from 6,400 tiles to 40,000 tiles), giving it a smooth, high-resolution canvas look. It is also runnable with `cargo run --release`.
 
 ## Additional Details
 
