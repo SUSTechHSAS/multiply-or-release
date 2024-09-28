@@ -1,15 +1,21 @@
 use bevy::prelude::*;
 
 use crate::{
-    battlefield::EliminationEvent,
+    battlefield::{game_is_going, EliminationEvent},
     utils::{BallColor, ParticipantMap},
 };
 
 pub struct UIPlugin;
 impl Plugin for UIPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(Startup, setup)
-            .add_systems(Update, (add_elimination_text, remove_elimination_text));
+        app.add_systems(Startup, setup).add_systems(
+            Update,
+            (
+                add_elimination_text.run_if(on_event::<EliminationEvent>()),
+                remove_elimination_text.run_if(any_with_component::<EliminationTextTimer>),
+                add_game_over_text.run_if(not(game_is_going).and_then(run_once())),
+            ),
+        );
     }
 }
 
@@ -17,6 +23,7 @@ impl Plugin for UIPlugin {
 
 const ELIMINATION_TEXT_DURATION: f32 = 4.0;
 const ELIMINATION_TEXT_FONT_SIZE: f32 = 32.0;
+const GAME_OVER_TEXT_FONT_SIZE: f32 = 64.0;
 
 // }}}
 
@@ -92,4 +99,19 @@ fn remove_elimination_text(
             commands.entity(text_id).despawn_recursive();
         }
     }
+}
+fn add_game_over_text(mut commands: Commands, ui_root: Query<Entity, With<UIRoot>>) {
+    let text_id = commands
+        .spawn(TextBundle::from_section(
+            "Game Over",
+            TextStyle {
+                font: default(),
+                font_size: GAME_OVER_TEXT_FONT_SIZE,
+                color: Color::BLACK,
+            },
+        ))
+        .id();
+    commands
+        .entity(ui_root.single())
+        .insert_children(0, &[text_id]);
 }

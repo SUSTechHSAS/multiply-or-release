@@ -69,14 +69,26 @@ impl Plugin for BattlefieldPlugin {
                 Update,
                 (
                     rotate_turret,
-                    handle_trigger_events.after(handle_bullet_turret_collision),
+                    handle_trigger_events
+                        .run_if(game_is_going)
+                        .after(handle_bullet_turret_collision),
                     handle_bullet_tile_collision,
-                    handle_bullet_turret_collision.after(handle_bullet_tile_collision),
+                    handle_bullet_turret_collision
+                        .run_if(game_is_going)
+                        .after(handle_bullet_tile_collision),
                     update_charge_level.after(handle_bullet_turret_collision),
                     update_charge_ball.after(update_charge_level),
+                    handle_elimination
+                        .run_if(on_event::<EliminationEvent>())
+                        .after(handle_bullet_turret_collision),
                 ),
             )
-            .add_systems(FixedUpdate, fire_shots.after(handle_trigger_events));
+            .add_systems(
+                FixedUpdate,
+                fire_shots
+                    .run_if(game_is_going)
+                    .after(handle_trigger_events),
+            );
         // .insert_resource(AutoTimer::default())
         // .add_systems(Update, auto_elimination);
     }
@@ -85,6 +97,13 @@ impl Plugin for BattlefieldPlugin {
 #[derive(Event)]
 pub struct EliminationEvent {
     pub participant: Participant,
+}
+#[derive(Resource)]
+pub struct SurvivorCount(pub u8);
+impl Default for SurvivorCount {
+    fn default() -> Self {
+        Self(4)
+    }
 }
 #[derive(Component)]
 struct BattlefieldRoot;
@@ -389,6 +408,7 @@ fn setup(
     materials: Res<ParticipantMap<Handle<ColorMaterial>>>,
 ) {
     commands.insert_resource(TurretStopwatch::default());
+    commands.insert_resource(SurvivorCount::default());
     let root = commands
         .spawn((
             Name::new("Battlefield Root"),
@@ -779,12 +799,15 @@ fn handle_bullet_tile_collision(
         }
     }
 }
+pub fn game_is_going(survivor_count: Res<SurvivorCount>) -> bool {
+    survivor_count.0 > 1
+}
 #[derive(Resource, Deref, DerefMut)]
 #[allow(dead_code)]
 struct AutoTimer(Timer);
 impl Default for AutoTimer {
     fn default() -> Self {
-        Self(Timer::from_seconds(1.0, TimerMode::Once))
+        Self(Timer::from_seconds(30.0, TimerMode::Once))
     }
 }
 #[allow(dead_code)]

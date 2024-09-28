@@ -13,6 +13,7 @@ use rand::{
 };
 
 use crate::{
+    battlefield::game_is_going,
     collision_groups::{self, PANEL_OBSTACLES, PANEL_TRIGGER_ZONES},
     utils::ParticipantMap,
     Participant,
@@ -84,8 +85,11 @@ impl Plugin for PanelPlugin {
     fn build(&self, app: &mut App) {
         app.add_event::<TriggerEvent>()
             .add_systems(Startup, setup)
-            .add_systems(Update, spawn_workers.run_if(spawn_workers_condition))
-            .add_systems(Update, (trigger_event, ball_reset));
+            .add_systems(
+                Update,
+                spawn_workers.run_if(spawn_workers_condition.and_then(game_is_going)),
+            )
+            .add_systems(Update, (trigger_event, ball_reset).run_if(game_is_going));
     }
 }
 
