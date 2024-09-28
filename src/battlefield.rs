@@ -5,13 +5,13 @@ use std::{
     f32::consts::{FRAC_PI_2, PI},
 };
 
-use bevy::{prelude::*, sprite::Mesh2dHandle, time::Stopwatch, utils::tracing::instrument};
+use bevy::{prelude::*, sprite::Mesh2dHandle, time::Stopwatch};
 use bevy_rapier2d::prelude::*;
 
 use crate::{
     collision_groups,
     panel_plugin::{TriggerEvent, TriggerType},
-    utils::{Participant, ParticipantMap},
+    utils::{Participant, ParticipantMap, TileColor},
 };
 
 // Constants {{{
@@ -63,7 +63,8 @@ const TURRET_PLATFORM_Z: f32 = -1.0;
 pub struct BattlefieldPlugin;
 impl Plugin for BattlefieldPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(Startup, setup)
+        app.add_event::<EliminationEvent>()
+            .add_systems(Startup, setup)
             .add_systems(
                 Update,
                 (
@@ -77,10 +78,14 @@ impl Plugin for BattlefieldPlugin {
             )
             .add_systems(FixedUpdate, fire_shots.after(handle_trigger_events));
         // .insert_resource(AutoTimer::default())
-        // .add_systems(Update, auto_fire);
+        // .add_systems(Update, auto_elimination);
     }
 }
 
+#[derive(Debug, Event)]
+pub struct EliminationEvent {
+    pub participant: Participant,
+}
 #[derive(Component)]
 struct BattlefieldRoot;
 /// Marker to mark this entity as a tile.
@@ -212,7 +217,6 @@ struct BulletBundle {
     text_bundle: Text2dBundle,
 }
 impl BulletBundle {
-    #[instrument(level = "debug")]
     fn new(
         owner: Participant,
         position: Vec2,
@@ -381,7 +385,7 @@ impl TurretPlatformBundle {
 fn setup(
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
-    colors: Res<ParticipantMap<Color>>,
+    colors: Res<ParticipantMap<TileColor>>,
     materials: Res<ParticipantMap<Handle<ColorMaterial>>>,
 ) {
     commands.insert_resource(TurretStopwatch::default());
@@ -426,16 +430,16 @@ fn setup(
         for j in 0..TILE_COUNT {
             let y = TILE_DIMENSION / 2.0 + j as f32 * TILE_DIMENSION;
             commands
-                .spawn(TileBundle::new(Participant::A, colors.a, x, y))
+                .spawn(TileBundle::new(Participant::A, colors.a.0, x, y))
                 .set_parent(battlefield);
             commands
-                .spawn(TileBundle::new(Participant::B, colors.b, -x, y))
+                .spawn(TileBundle::new(Participant::B, colors.b.0, -x, y))
                 .set_parent(battlefield);
             commands
-                .spawn(TileBundle::new(Participant::C, colors.c, x, -y))
+                .spawn(TileBundle::new(Participant::C, colors.c.0, x, -y))
                 .set_parent(battlefield);
             commands
-                .spawn(TileBundle::new(Participant::D, colors.d, -x, -y))
+                .spawn(TileBundle::new(Participant::D, colors.d.0, -x, -y))
                 .set_parent(battlefield);
         }
     }
@@ -658,12 +662,13 @@ fn handle_trigger_events(
 }
 fn handle_bullet_turret_collision(
     mut commands: Commands,
-    mut events: EventReader<CollisionEvent>,
+    mut collision_event_reader: EventReader<CollisionEvent>,
+    mut elimination_event_writer: EventWriter<EliminationEvent>,
     mut bullet_query: Query<(Entity, &Participant, &mut Charge, &mut Velocity), With<Bullet>>,
     mut turret_query: Query<(&Participant, &mut Charge), (With<FiringQueue>, Without<Bullet>)>,
     participant_entity_query: Query<(Entity, &Participant), (Without<Tile>, Without<Bullet>)>,
 ) {
-    for event in events.read() {
+    for event in collision_event_reader.read() {
         match event {
             &CollisionEvent::Started(a, b, _) => {
                 let (bullet_entity, &bullet_owner, mut bullet_charge, mut velocity) =
@@ -690,6 +695,9 @@ fn handle_bullet_turret_collision(
                 } else {
                     bullet_charge.value -= turret_charge.value;
                     let mut kill = || {
+                        elimination_event_writer.send(EliminationEvent {
+                            participant: turret_owner,
+                        });
                         for (e, &p) in &participant_entity_query {
                             if p == turret_owner {
                                 commands.entity(e).despawn_recursive();
@@ -719,7 +727,7 @@ fn handle_bullet_turret_collision(
 }
 fn handle_bullet_tile_collision(
     mut events: EventReader<CollisionEvent>,
-    colors: Res<ParticipantMap<Color>>,
+    colors: Res<ParticipantMap<TileColor>>,
     mut bullet_query: Query<(&Participant, &mut Charge), With<Bullet>>,
     mut tile_query: Query<
         (&mut Participant, &mut Sprite, &mut CollisionGroups),
@@ -751,7 +759,7 @@ fn handle_bullet_tile_collision(
                     continue;
                 }
                 *tile_owner = bullet_owner;
-                sprite.color = *colors.get(bullet_owner);
+                sprite.color = colors.get(bullet_owner).0;
                 *collision_group = CollisionGroups::new(
                     collision_groups::tile(bullet_owner),
                     collision_groups::all_bullets_except(bullet_owner),
@@ -767,7 +775,20 @@ fn handle_bullet_tile_collision(
 struct AutoTimer(Timer);
 impl Default for AutoTimer {
     fn default() -> Self {
-        Self(Timer::from_seconds(1.0, TimerMode::Repeating))
+        Self(Timer::from_seconds(1.0, TimerMode::Once))
+    }
+}
+#[allow(dead_code)]
+fn auto_elimination(
+    mut writer: EventWriter<EliminationEvent>,
+    mut timer: ResMut<AutoTimer>,
+    time: Res<Time>,
+) {
+    timer.tick(time.delta());
+    if timer.just_finished() {
+        writer.send(EliminationEvent {
+            participant: Participant::A,
+        });
     }
 }
 #[allow(dead_code)]

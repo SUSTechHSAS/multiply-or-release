@@ -3,11 +3,13 @@ use bevy::{prelude::*, render::camera::ScalingMode};
 use bevy_inspector_egui::quick::WorldInspectorPlugin;
 use bevy_rapier2d::prelude::*;
 use panel_plugin::PanelPlugin;
+use ui::UIPlugin;
 use utils::{Participant, UtilsPlugin};
 
 mod battlefield;
 mod collision_groups;
 mod panel_plugin;
+mod ui;
 mod utils;
 
 const WINDOW_TITLE: &str = "Multiply or Release";
@@ -25,7 +27,7 @@ fn main() {
         .add_plugins(RapierPhysicsPlugin::<NoUserData>::default())
         // .add_plugins(RapierDebugRenderPlugin::default())
         .add_plugins(WorldInspectorPlugin::new())
-        .add_plugins((UtilsPlugin, PanelPlugin, BattlefieldPlugin))
+        .add_plugins((UtilsPlugin, PanelPlugin, BattlefieldPlugin, UIPlugin))
         .add_systems(Startup, setup)
         .run();
 }
