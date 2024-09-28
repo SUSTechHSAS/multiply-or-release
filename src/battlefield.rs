@@ -82,7 +82,7 @@ impl Plugin for BattlefieldPlugin {
     }
 }
 
-#[derive(Debug, Event)]
+#[derive(Event)]
 pub struct EliminationEvent {
     pub participant: Participant,
 }
@@ -666,7 +666,6 @@ fn handle_bullet_turret_collision(
     mut elimination_event_writer: EventWriter<EliminationEvent>,
     mut bullet_query: Query<(Entity, &Participant, &mut Charge, &mut Velocity), With<Bullet>>,
     mut turret_query: Query<(&Participant, &mut Charge), (With<FiringQueue>, Without<Bullet>)>,
-    participant_entity_query: Query<(Entity, &Participant), (Without<Tile>, Without<Bullet>)>,
 ) {
     for event in collision_event_reader.read() {
         match event {
@@ -698,11 +697,6 @@ fn handle_bullet_turret_collision(
                         elimination_event_writer.send(EliminationEvent {
                             participant: turret_owner,
                         });
-                        for (e, &p) in &participant_entity_query {
-                            if p == turret_owner {
-                                commands.entity(e).despawn_recursive();
-                            }
-                        }
                     };
                     if turret_charge.level < ONE_SHOT_PROTECTION_THRESHOLD {
                         kill();
@@ -722,6 +716,21 @@ fn handle_bullet_turret_collision(
                 turret_charge.value -= min_value;
             }
             CollisionEvent::Stopped(_, _, _) => (),
+        }
+    }
+}
+fn handle_elimination(
+    mut commands: Commands,
+    mut events: EventReader<EliminationEvent>,
+    mut survivor_count: ResMut<SurvivorCount>,
+    participant_entity_query: Query<(Entity, &Participant), (Without<Tile>, Without<Bullet>)>,
+) {
+    for event in events.read() {
+        survivor_count.0 -= 1;
+        for (e, &p) in &participant_entity_query {
+            if p == event.participant {
+                commands.entity(e).despawn_recursive();
+            }
         }
     }
 }
@@ -788,6 +797,12 @@ fn auto_elimination(
     if timer.just_finished() {
         writer.send(EliminationEvent {
             participant: Participant::A,
+        });
+        writer.send(EliminationEvent {
+            participant: Participant::B,
+        });
+        writer.send(EliminationEvent {
+            participant: Participant::C,
         });
     }
 }
