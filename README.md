@@ -1,5 +1,4 @@
-# Project Title
-Multiply or Release — Charged Shot vs Burst Shot
+# Multiply or Release — Charged Shot vs Burst Shot
 
 Team members:
 
