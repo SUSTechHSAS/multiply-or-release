@@ -26,7 +26,7 @@ fn main() {
         .add_plugins(DefaultPlugins.set(window_plugin))
         .add_plugins(RapierPhysicsPlugin::<NoUserData>::default())
         // .add_plugins(RapierDebugRenderPlugin::default())
-        .add_plugins(WorldInspectorPlugin::new())
+        // .add_plugins(WorldInspectorPlugin::new())
         .add_plugins((UtilsPlugin, PanelPlugin, BattlefieldPlugin, UIPlugin))
         .add_systems(Startup, setup)
         .run();

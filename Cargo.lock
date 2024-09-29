@@ -2563,6 +2563,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "multiply_or_release"
+version = "0.1.0"
+dependencies = [
+ "bevy",
+ "bevy-inspector-egui",
+ "bevy_rapier2d",
+ "rand",
+ "tracing",
+]
+
+[[package]]
 name = "naga"
 version = "0.19.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3569,17 +3580,6 @@ dependencies = [
  "grid",
  "num-traits",
  "slotmap",
-]
-
-[[package]]
-name = "team_rr"
-version = "0.1.0"
-dependencies = [
- "bevy",
- "bevy-inspector-egui",
- "bevy_rapier2d",
- "rand",
- "tracing",
 ]
 
 [[package]]
