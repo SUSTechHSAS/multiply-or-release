@@ -487,14 +487,6 @@ fn setup(
             ))
             .set_parent(root);
         commands
-            .spawn(TriggerZoneBundle::new(
-                TriggerType::Multiply,
-                Vec2::new(ARENA_WIDTH_FRAC_2, TRIGGER_ZONE_HEIGHT),
-                Vec3::new(0.0, TRIGGER_ZONE_Y, TRIGGER_ZONE_Z),
-                MULTIPLY_ZONE_COLOR,
-            ))
-            .set_parent(root);
-        commands
             .spawn(Text2dBundle {
                 text: Text::from_section(
                     TriggerType::Multiply.to_string(),
