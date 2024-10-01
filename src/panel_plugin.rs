@@ -519,8 +519,8 @@ fn setup(
     commands
         .spawn(SpriteBundle {
             transform: Transform {
-                translation: Vec3::new(0.0, 0.0, 1.0),
-                scale: Vec3::new(ARENA_WIDTH, ARENA_HEIGHT, ARENA_Z),
+                translation: Vec3::new(0.0, 0.0, ARENA_Z),
+                scale: Vec3::new(ARENA_WIDTH, ARENA_HEIGHT, 1.0),
                 rotation: Quat::IDENTITY,
             },
             sprite: Sprite {

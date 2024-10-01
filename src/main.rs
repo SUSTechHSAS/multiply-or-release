@@ -1,6 +1,5 @@
 use battlefield::BattlefieldPlugin;
 use bevy::{prelude::*, render::camera::ScalingMode};
-use bevy_inspector_egui::quick::WorldInspectorPlugin;
 use bevy_rapier2d::prelude::*;
 use panel_plugin::PanelPlugin;
 use ui::UIPlugin;
