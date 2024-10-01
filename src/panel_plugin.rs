@@ -45,6 +45,10 @@ const CIRCLE_PYRAMID_VERTICAL_COUNT: usize = 5;
 const CIRCLE_PYRAMID_VERTICAL_GAP: f32 = 8.0;
 const CIRCLE_PYRAMID_HORIZONTAL_GAP: f32 = 45.0;
 
+const TRIGGER_ZONE_DIVIDER_COLOR: Color = Color::rgb(0.8, 0.8, 0.8);
+const TRIGGER_ZONE_DIVIDER_HEIGHT_OFFSET: f32 = 4.0;
+const TRIGGER_ZONE_DIVIDER_RADIUS: f32 = 5.0;
+
 const CIRCLE_GRID_VERTICAL_OFFSET: f32 = 70.0;
 const CIRCLE_GRID_VERTICAL_COUNT: usize = 8;
 const CIRCLE_GRID_VERTICAL_GAP: f32 = 15.0;
@@ -63,6 +67,7 @@ const WALL_Z: f32 = 0.0;
 const ARENA_Z: f32 = 1.0;
 const CIRCLE_Z: f32 = 2.0;
 const TRIGGER_ZONE_Z: f32 = 2.0;
+const TRIGGER_ZONE_DIVIDER_Z: f32 = 3.0;
 const TRIGGER_ZONE_TEXT_OFFSET_Z: f32 = 3.0;
 const WORKER_BALL_Z: f32 = 4.0;
 
@@ -119,6 +124,15 @@ impl std::fmt::Display for TriggerType {
             Self::ChargedShot => write!(f, "Release Changed Shots"),
         }
     }
+}
+
+#[derive(Bundle, Clone, Resource)]
+struct TriggerZoneDividerBundle {
+    // {{{
+    matmesh: MaterialMesh2dBundle<ColorMaterial>,
+    collider: Collider,
+    collision_groups: CollisionGroups,
+    rigidbody: RigidBody,
 }
 
 #[derive(Bundle, Clone, Resource)]
@@ -363,6 +377,16 @@ fn setup(
         .mesh(meshes.add(Circle::new(CIRCLE_RADIUS)))
         .collider(Collider::ball(CIRCLE_RADIUS));
 
+    let length = TRIGGER_ZONE_DIVIDER_HEIGHT_OFFSET + TRIGGER_ZONE_HEIGHT;
+    let divider_builder = ObstacleBundleBuilder::new()
+        .z(TRIGGER_ZONE_DIVIDER_Z)
+        .material(materials.add(TRIGGER_ZONE_DIVIDER_COLOR))
+        .mesh(meshes.add(Capsule2d::new(TRIGGER_ZONE_DIVIDER_RADIUS, length)))
+        .collider(Collider::capsule_y(
+            length / 2.0,
+            TRIGGER_ZONE_DIVIDER_RADIUS,
+        ));
+
     let mut f = |root: Entity| {
         for i in 0..CIRCLE_PYRAMID_VERTICAL_COUNT {
             let y = -(i as f32) * (CIRCLE_DIAMETER + CIRCLE_PYRAMID_VERTICAL_GAP)
@@ -438,6 +462,30 @@ fn setup(
             }
         }
 
+        commands
+            .spawn(
+                divider_builder
+                    .clone()
+                    .xy(-ARENA_WIDTH_FRAC_4, TRIGGER_ZONE_Y)
+                    .buildtmb(),
+            )
+            .set_parent(root);
+        commands
+            .spawn(
+                divider_builder
+                    .clone()
+                    .xy(ARENA_WIDTH_FRAC_4, TRIGGER_ZONE_Y)
+                    .buildtmb(),
+            )
+            .set_parent(root);
+        commands
+            .spawn(TriggerZoneBundle::new(
+                TriggerType::Multiply,
+                Vec2::new(ARENA_WIDTH_FRAC_2, TRIGGER_ZONE_HEIGHT),
+                Vec3::new(0.0, TRIGGER_ZONE_Y, TRIGGER_ZONE_Z),
+                MULTIPLY_ZONE_COLOR,
+            ))
+            .set_parent(root);
         commands
             .spawn(TriggerZoneBundle::new(
                 TriggerType::Multiply,
