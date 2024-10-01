@@ -1,5 +1,5 @@
 use battlefield::BattlefieldPlugin;
-use bevy::{prelude::*, render::camera::ScalingMode};
+use bevy::{prelude::*, render::camera::ScalingMode, window::WindowMode};
 use bevy_rapier2d::prelude::*;
 use panel_plugin::PanelPlugin;
 use ui::UIPlugin;
@@ -17,6 +17,7 @@ fn main() {
     let window_plugin = WindowPlugin {
         primary_window: Some(Window {
             title: WINDOW_TITLE.to_string(),
+            mode: WindowMode::BorderlessFullscreen,
             ..default()
         }),
         ..default()
