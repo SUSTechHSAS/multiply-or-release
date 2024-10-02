@@ -18,8 +18,9 @@ use crate::{
 
 const TILE_BORDER_COLOR: Color = Color::BLACK;
 const TILE_COUNT: usize = 100;
-const BATTLEFIELD_BOUNDARY: f32 = 360.0;
-const TILE_DIMENSION: f32 = BATTLEFIELD_BOUNDARY / TILE_COUNT as f32;
+const TILE_DIMENSION: f32 = BATTLEFIELD_HALF_WIDTH / TILE_COUNT as f32;
+pub const BATTLEFIELD_HALF_WIDTH: f32 = 360.0;
+const BATTLEFIELD_BOUNDARY_HALF_WIDTH: f32 = 50.0;
 
 const TURRET_POSITION: f32 = 350.0;
 const TURRET_HEAD_COLOR: Color = Color::DARK_GRAY;
@@ -415,6 +416,21 @@ fn setup(
 ) {
     commands.insert_resource(TurretStopwatch::default());
     commands.insert_resource(SurvivorCount::default());
+    const OFFSET: f32 = BATTLEFIELD_HALF_WIDTH + BATTLEFIELD_BOUNDARY_HALF_WIDTH;
+    let horizontal_cuboid = Collider::cuboid(
+        BATTLEFIELD_HALF_WIDTH + BATTLEFIELD_BOUNDARY_HALF_WIDTH * 2.0,
+        BATTLEFIELD_BOUNDARY_HALF_WIDTH,
+    );
+    let vertical_cuboid = Collider::cuboid(
+        BATTLEFIELD_BOUNDARY_HALF_WIDTH,
+        BATTLEFIELD_HALF_WIDTH + BATTLEFIELD_BOUNDARY_HALF_WIDTH * 2.0,
+    );
+    let collider = Collider::compound(vec![
+        (Vect::new(OFFSET, 0.0), 0.0, vertical_cuboid.clone()),
+        (Vect::new(-OFFSET, 0.0), 0.0, vertical_cuboid.clone()),
+        (Vect::new(0.0, OFFSET), 0.0, horizontal_cuboid.clone()),
+        (Vect::new(0.0, -OFFSET), 0.0, horizontal_cuboid.clone()),
+    ]);
     let root = commands
         .spawn((
             Name::new("Battlefield Root"),
@@ -428,16 +444,7 @@ fn setup(
                 coefficient: 1.0,
                 combine_rule: CoefficientCombineRule::Max,
             },
-            Collider::polyline(
-                vec![
-                    Vect::new(BATTLEFIELD_BOUNDARY, BATTLEFIELD_BOUNDARY),
-                    Vect::new(-BATTLEFIELD_BOUNDARY, BATTLEFIELD_BOUNDARY),
-                    Vect::new(-BATTLEFIELD_BOUNDARY, -BATTLEFIELD_BOUNDARY),
-                    Vect::new(BATTLEFIELD_BOUNDARY, -BATTLEFIELD_BOUNDARY),
-                    Vect::new(BATTLEFIELD_BOUNDARY, BATTLEFIELD_BOUNDARY),
-                ],
-                None,
-            ),
+            collider,
             SpriteBundle {
                 sprite: Sprite {
                     color: TILE_BORDER_COLOR,
@@ -586,7 +593,7 @@ fn fire_shots(
         let get_offset = |radius: f32| {
             let translation = transform.translation;
             let absx = translation.x.abs();
-            let abs_offset = absx - absx.min(BATTLEFIELD_BOUNDARY - radius);
+            let abs_offset = absx - absx.min(BATTLEFIELD_HALF_WIDTH - radius);
             Vec2::new(translation.x.signum(), translation.y.signum()) * abs_offset
         };
         let shape_cast = |radius: f32, offset: Vec2| {
