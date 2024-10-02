@@ -1,9 +1,9 @@
 use std::time::Duration;
 
 use bevy::{
+    color::palettes::css,
     prelude::*,
     sprite::{MaterialMesh2dBundle, Mesh2dHandle},
-    text::Text2dBounds,
 };
 use bevy_rapier2d::prelude::*;
 use rand::{
@@ -27,25 +27,27 @@ const LEFT_ROOT_X: f32 = -500.0;
 const RIGHT_ROOT_X: f32 = 500.0;
 
 const WALL_THICKNESS: f32 = 10.0;
-const WALL_COLOR: Color = Color::rgb(0.8, 0.8, 0.8);
-const ARENA_COLOR: Color = Color::DARK_GRAY;
+const WALL_COLOR: Color = Color::srgb(0.8, 0.8, 0.8);
+const ARENA_COLOR: Color = Color::Srgba(css::DARK_SLATE_GRAY);
 const ARENA_HEIGHT: f32 = 700.0;
 const ARENA_WIDTH: f32 = 260.0;
 
 const TRIGGER_ZONE_Y: f32 = -250.0;
 const TRIGGER_ZONE_HEIGHT: f32 = 40.0;
-const MULTIPLY_ZONE_COLOR: Color = Color::LIME_GREEN;
-const BURST_SHOT_ZONE_COLOR: Color = Color::ALICE_BLUE;
-const CHARGED_SHOT_ZONE_COLOR: Color = Color::RED;
+const MULTIPLY_ZONE_COLOR: Color = Color::Srgba(css::LIMEGREEN);
+const BURST_SHOT_ZONE_COLOR: Color = Color::Srgba(css::ALICE_BLUE);
+const CHARGED_SHOT_ZONE_COLOR: Color = Color::Srgba(css::RED);
+const TRIGGER_ZONE_TEXT_COLOR: Color = Color::BLACK;
+const TRIGGER_ZONE_TEXT_SIZE: f32 = 12.0;
 
 const CIRCLE_RADIUS: f32 = 10.0;
-const CIRCLE_COLOR: Color = Color::rgb(0.8, 0.8, 0.8);
+const CIRCLE_COLOR: Color = Color::srgb(0.8, 0.8, 0.8);
 const CIRCLE_PYRAMID_VERTICAL_OFFSET: f32 = 250.0;
 const CIRCLE_PYRAMID_VERTICAL_COUNT: usize = 5;
 const CIRCLE_PYRAMID_VERTICAL_GAP: f32 = 8.0;
 const CIRCLE_PYRAMID_HORIZONTAL_GAP: f32 = 45.0;
 
-const TRIGGER_ZONE_DIVIDER_COLOR: Color = Color::rgb(0.8, 0.8, 0.8);
+const TRIGGER_ZONE_DIVIDER_COLOR: Color = Color::srgb(0.8, 0.8, 0.8);
 const TRIGGER_ZONE_DIVIDER_HEIGHT_OFFSET: f32 = 4.0;
 const TRIGGER_ZONE_DIVIDER_RADIUS: f32 = 5.0;
 
@@ -61,6 +63,7 @@ const WORKER_BALL_SPAWN_Y: f32 = 320.0;
 const WORKER_BALL_RESTITUTION_COEFFICIENT: f32 = 0.5;
 const WORKER_BALL_SPAWN_TIMER_SECS: f32 = 10.0;
 const WORKER_BALL_COUNT_MAX: usize = 10;
+const WORKER_BALL_GRAVITY_SCALE: f32 = 15.0;
 
 // Z-index
 const WALL_Z: f32 = 0.0;
@@ -120,8 +123,8 @@ impl std::fmt::Display for TriggerType {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::Multiply => write!(f, "Multiply"),
-            Self::BurstShot => write!(f, "Release Burst Shots"),
-            Self::ChargedShot => write!(f, "Release Changed Shots"),
+            Self::BurstShot => write!(f, "Release\nBurst\nShots"),
+            Self::ChargedShot => write!(f, "Release\nChanged\nShots"),
         }
     }
 }
@@ -187,6 +190,7 @@ struct WorkerBallBundle {
     restitution: Restitution,
     rigidbody: RigidBody,
     velocity: Velocity,
+    gravity: GravityScale,
 }
 impl WorkerBallBundle {
     fn new(
@@ -215,6 +219,7 @@ impl WorkerBallBundle {
             },
             rigidbody: RigidBody::Dynamic,
             velocity: Velocity::zero(),
+            gravity: GravityScale(WORKER_BALL_GRAVITY_SCALE),
         }
     }
     // }}}
@@ -491,7 +496,8 @@ fn setup(
                 text: Text::from_section(
                     TriggerType::Multiply.to_string(),
                     TextStyle {
-                        color: Color::BLACK,
+                        color: TRIGGER_ZONE_TEXT_COLOR,
+                        font_size: TRIGGER_ZONE_TEXT_SIZE,
                         ..default()
                     },
                 )
@@ -503,9 +509,6 @@ fn setup(
                         z: TRIGGER_ZONE_TEXT_OFFSET_Z,
                     },
                     ..default()
-                },
-                text_2d_bounds: Text2dBounds {
-                    size: Vec2::new(ARENA_WIDTH_FRAC_2, TRIGGER_ZONE_HEIGHT),
                 },
                 ..default()
             })
@@ -528,21 +531,21 @@ fn setup(
                 text: Text::from_section(
                     TriggerType::BurstShot.to_string(),
                     TextStyle {
-                        color: Color::BLACK,
+                        color: TRIGGER_ZONE_TEXT_COLOR,
+                        font_size: TRIGGER_ZONE_TEXT_SIZE,
                         ..default()
                     },
                 )
                 .with_justify(JustifyText::Center),
                 transform: Transform {
                     translation: Vec3 {
-                        x: ARENA_WIDTH_FRAC_4 + ARENA_WIDTH_FRAC_8,
+                        x: ARENA_WIDTH_FRAC_4
+                            + ARENA_WIDTH_FRAC_8
+                            + TRIGGER_ZONE_DIVIDER_RADIUS / 2.0,
                         y: TRIGGER_ZONE_Y,
                         z: TRIGGER_ZONE_TEXT_OFFSET_Z,
                     },
                     ..default()
-                },
-                text_2d_bounds: Text2dBounds {
-                    size: Vec2::new(ARENA_WIDTH_FRAC_4, TRIGGER_ZONE_HEIGHT),
                 },
                 ..default()
             })
@@ -565,21 +568,21 @@ fn setup(
                 text: Text::from_section(
                     TriggerType::ChargedShot.to_string(),
                     TextStyle {
-                        color: Color::BLACK,
+                        color: TRIGGER_ZONE_TEXT_COLOR,
+                        font_size: TRIGGER_ZONE_TEXT_SIZE,
                         ..default()
                     },
                 )
                 .with_justify(JustifyText::Center),
                 transform: Transform {
                     translation: Vec3 {
-                        x: -ARENA_WIDTH_FRAC_4 - ARENA_WIDTH_FRAC_8,
+                        x: -ARENA_WIDTH_FRAC_4
+                            - ARENA_WIDTH_FRAC_8
+                            - TRIGGER_ZONE_DIVIDER_RADIUS / 2.0,
                         y: TRIGGER_ZONE_Y,
                         z: TRIGGER_ZONE_TEXT_OFFSET_Z,
                     },
                     ..default()
-                },
-                text_2d_bounds: Text2dBounds {
-                    size: Vec2::new(ARENA_WIDTH_FRAC_4, TRIGGER_ZONE_HEIGHT),
                 },
                 ..default()
             })

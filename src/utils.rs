@@ -1,11 +1,11 @@
-use bevy::prelude::*;
+use bevy::{color::palettes::css, prelude::*};
 
 // Constants {{{
 
-const PARTICIPANT_COLORS: ParticipantMap<Color> =
-    ParticipantMap::new(Color::MAROON, Color::DARK_GREEN, Color::PURPLE, Color::GOLD);
-const BALL_COLORS: ParticipantMap<Color> =
-    ParticipantMap::new(Color::RED, Color::GREEN, Color::VIOLET, Color::YELLOW);
+const PARTICIPANT_COLORS: ParticipantMap<Srgba> =
+    ParticipantMap::new(css::MAROON, css::DARK_GREEN, css::PURPLE, css::GOLD);
+const BALL_COLORS: ParticipantMap<Srgba> =
+    ParticipantMap::new(css::RED, css::GREEN, css::VIOLET, css::YELLOW);
 const PARTICIPANT_NAME: ParticipantMap<&'static str> =
     ParticipantMap::new("RED", "GREEN", "VIOLET", "YELLOW");
 
@@ -71,7 +71,9 @@ pub enum Participant {
 
 fn setup(mut commands: Commands, mut materials: ResMut<Assets<ColorMaterial>>) {
     commands.insert_resource(PARTICIPANT_NAME);
-    commands.insert_resource(PARTICIPANT_COLORS.map(TileColor));
-    commands.insert_resource(BALL_COLORS.map(BallColor));
-    commands.insert_resource(BALL_COLORS.map(|color| materials.add(color)));
+    commands.insert_resource(PARTICIPANT_COLORS.map(Color::Srgba).map(TileColor));
+    commands.insert_resource(BALL_COLORS.map(Color::Srgba).map(BallColor));
+    commands.insert_resource(
+        BALL_COLORS.map(|srgba| materials.add(ColorMaterial::from(Color::from(srgba)))),
+    );
 }

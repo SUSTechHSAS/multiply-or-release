@@ -5,7 +5,7 @@ use std::{
     f32::consts::{FRAC_PI_2, PI},
 };
 
-use bevy::{prelude::*, sprite::Mesh2dHandle, time::Stopwatch};
+use bevy::{color::palettes::css, prelude::*, sprite::Mesh2dHandle, time::Stopwatch};
 use bevy_rapier2d::prelude::*;
 use rand::{thread_rng, Rng};
 
@@ -24,7 +24,7 @@ pub const BATTLEFIELD_HALF_WIDTH: f32 = 360.0;
 const BATTLEFIELD_BOUNDARY_HALF_WIDTH: f32 = 50.0;
 
 const TURRET_POSITION: f32 = 350.0;
-const TURRET_HEAD_COLOR: Color = Color::DARK_GRAY;
+const TURRET_HEAD_COLOR: Color = Color::Srgba(css::DARK_GRAY);
 const TURRET_HEAD_THICNESS: f32 = 2.5;
 const TURRET_HEAD_LENGTH: f32 = 75.0;
 const TURRET_ROTATION_SPEED: f32 = 1.0;
