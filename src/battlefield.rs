@@ -7,7 +7,6 @@ use std::{
 
 use bevy::{color::palettes::css, prelude::*, sprite::Mesh2dHandle, time::Stopwatch};
 use bevy_rapier2d::prelude::*;
-use rand::{thread_rng, Rng};
 
 use crate::{
     collision_groups,
@@ -83,8 +82,6 @@ impl Plugin for BattlefieldPlugin {
                     .run_if(game_is_going)
                     .after(handle_trigger_events),
             );
-        // .insert_resource(AutoTimer::default())
-        // .add_systems(Update, auto_fire);
     }
 }
 
@@ -796,60 +793,4 @@ fn handle_bullet_tile_collision(
 }
 pub fn game_is_going(survivor_count: Res<SurvivorCount>) -> bool {
     survivor_count.0 > 1
-}
-#[derive(Resource, Deref, DerefMut)]
-#[allow(dead_code)]
-struct AutoTimer(Timer);
-impl Default for AutoTimer {
-    fn default() -> Self {
-        Self(Timer::from_seconds(1.0, TimerMode::Repeating))
-    }
-}
-#[allow(dead_code)]
-fn auto_elimination(
-    mut writer: EventWriter<EliminationEvent>,
-    mut timer: ResMut<AutoTimer>,
-    time: Res<Time>,
-) {
-    timer.tick(time.delta());
-    if timer.just_finished() {
-        writer.send(EliminationEvent {
-            participant: Participant::A,
-        });
-        writer.send(EliminationEvent {
-            participant: Participant::B,
-        });
-        writer.send(EliminationEvent {
-            participant: Participant::C,
-        });
-    }
-}
-#[allow(dead_code)]
-fn auto_fire(mut writer: EventWriter<TriggerEvent>, mut timer: ResMut<AutoTimer>, time: Res<Time>) {
-    timer.tick(time.delta());
-    if timer.just_finished() {
-        let shot_type = if thread_rng().gen_bool(0.5) {
-            TriggerType::ChargedShot
-        } else {
-            TriggerType::BurstShot
-        };
-        writer.send(TriggerEvent {
-            participant: Participant::A,
-            trigger_type: shot_type,
-        });
-    }
-}
-#[allow(dead_code)]
-fn auto_multiply(
-    mut writer: EventWriter<TriggerEvent>,
-    mut timer: ResMut<AutoTimer>,
-    time: Res<Time>,
-) {
-    timer.tick(time.delta());
-    if timer.just_finished() {
-        writer.send(TriggerEvent {
-            participant: Participant::A,
-            trigger_type: TriggerType::Multiply,
-        });
-    }
 }
