@@ -7,6 +7,7 @@ use std::{
 
 use bevy::{prelude::*, sprite::Mesh2dHandle, time::Stopwatch};
 use bevy_rapier2d::prelude::*;
+use rand::{thread_rng, Rng};
 
 use crate::{
     collision_groups,
@@ -28,11 +29,7 @@ const TURRET_HEAD_THICNESS: f32 = 2.5;
 const TURRET_HEAD_LENGTH: f32 = 75.0;
 const TURRET_ROTATION_SPEED: f32 = 1.0;
 
-const MULTI_SHOT_CHARGE_THRESHOLD_0: u64 = 64; // Fire shots of 1s
-const MULTI_SHOT_CHARGE_THRESHOLD_1: u64 = 128; // Fire shots of 2s
-const MULTI_SHOT_CHARGE_THRESHOLD_2: u64 = 256; // Fire shots of 3s
-const MULTI_SHOT_CHARGE_THRESHOLD_3: u64 = 512; // Fire shots of 4s
-const MULTI_SHOT_CHARGE_THRESHOLD_4: u64 = 1024; // Fire shots of 5s
+const MULTI_SHOT_CHARGE_OFFSET: u64 = 4;
 
 const BULLET_TEXT_COLOR: Color = Color::BLACK;
 const BULLET_TEXT_FONT_SIZE_ASPECT: f32 = 0.5;
@@ -40,12 +37,8 @@ const BULLET_MINIMUM_TEXT_SIZE: f32 = 8.0;
 const BULLET_SIZE_FACTOR: f32 = 2.0;
 const BULLET_MASS_FACTOR: f64 = 1.0;
 const BULLET_RESTITUTION_COEFFICIENT: f32 = 0.75;
-// Bullet firing speed is given by max(a * b ^ (x / c), d) where x is the `charge.value` of the
-// bullet and a, b, c, d are:
-const BULLET_FIRING_VELOCITY: f32 = 150.0; // a
-const BULLET_FIRING_VELOCITY_SLOWDOWN_FACTOR: f32 = 0.985; // b
-const BULLET_FIRING_CHARGE_DIVISOR: f64 = 100.0; // c
-const BULLET_FIRING_VELOCITY_MIN: f32 = 75.0; // d
+const CHARGED_SHOT_BULLET_SPEED: f32 = 250.0;
+const BURST_SHOT_BULLET_SPEED: f32 = 500.0;
 
 const ONE_SHOT_PROTECTION_THRESHOLD: u64 = 10;
 const ONE_SHOT_DAMAGE_THRESHOLD: u64 = 1024;
@@ -168,9 +161,6 @@ impl Default for Charge {
     }
 }
 impl Charge {
-    fn new(value: u64, level: u64) -> Self {
-        Self { value, level }
-    }
     fn from_value(value: u64) -> Self {
         let mut v = Self { value, level: 1 };
         v.update_level();
@@ -249,14 +239,9 @@ impl BulletBundle {
         ball: Entity,
         charge: Charge,
         firing_angle: f32,
+        bullet_speed: f32,
     ) -> Self {
-        let speed = BULLET_FIRING_VELOCITY_MIN.max(
-            BULLET_FIRING_VELOCITY
-                * BULLET_FIRING_VELOCITY_SLOWDOWN_FACTOR
-                    .powi((charge.value as f64 / BULLET_FIRING_CHARGE_DIVISOR) as i32),
-        );
         let direction = Vec2::from_angle(firing_angle);
-        debug!(speed = speed, direction_vector = ?direction);
         Self {
             owner,
             charge,
@@ -284,7 +269,7 @@ impl BulletBundle {
                     | collision_groups::all_turrets_except(owner),
             ),
             collider_scale: ColliderScale::Absolute(Vect::splat(1.0)),
-            velocity: Velocity::linear(direction * speed),
+            velocity: Velocity::linear(direction * bullet_speed),
             rigidbody: RigidBody::Dynamic,
             mass: ColliderMassProperties::Mass((charge.value as f64 * BULLET_MASS_FACTOR) as f32),
             text_bundle: Text2dBundle {
@@ -609,7 +594,7 @@ fn fire_shots(
                 )
                 .is_some()
         };
-        let (charge, offset) = match shot_type {
+        let (charge, offset, bullet_speed) = match shot_type {
             ShotType::Charged => {
                 let radius = charge.get_scale();
                 let offset = get_offset(radius);
@@ -617,23 +602,15 @@ fn fire_shots(
                     turret.push_back((shot_type, charge));
                     continue;
                 } else {
-                    (charge, offset)
+                    (charge, offset, CHARGED_SHOT_BULLET_SPEED)
                 }
             }
             ShotType::Multi => {
-                let shot = if charge.value < MULTI_SHOT_CHARGE_THRESHOLD_0 {
-                    Charge::new(1, 1)
-                } else if charge.value < MULTI_SHOT_CHARGE_THRESHOLD_1 {
-                    Charge::new(2, 2)
-                } else if charge.value < MULTI_SHOT_CHARGE_THRESHOLD_2 {
-                    Charge::new(3, 2)
-                } else if charge.value < MULTI_SHOT_CHARGE_THRESHOLD_3 {
-                    Charge::new(4, 3)
-                } else if charge.value < MULTI_SHOT_CHARGE_THRESHOLD_4 {
-                    Charge::new(5, 3)
-                } else {
-                    Charge::from_value(charge.value / 100)
+                let shot_value = match charge.level.checked_sub(MULTI_SHOT_CHARGE_OFFSET) {
+                    None | Some(0) => 1,
+                    Some(value) => value,
                 };
+                let shot = Charge::from_value(shot_value);
                 let radius = shot.get_scale();
                 let offset = get_offset(radius);
                 if shape_cast(radius, offset) {
@@ -641,11 +618,15 @@ fn fire_shots(
                     continue;
                 } else {
                     let mut charge = charge;
-                    charge.value -= shot.value;
-                    if charge.value > 0 {
-                        turret.push_back((shot_type, charge));
+                    match charge.value.checked_sub(shot.value) {
+                        None | Some(0) => (),
+                        Some(remaining_value) => {
+                            charge.value = remaining_value;
+                            charge.update_level();
+                            turret.push_back((shot_type, charge));
+                        }
                     }
-                    (shot, offset)
+                    (shot, offset, BURST_SHOT_BULLET_SPEED)
                 }
             }
         };
@@ -663,6 +644,7 @@ fn fire_shots(
                 ball,
                 charge,
                 turret_stopwatch.get() + base_angle,
+                bullet_speed,
             ))
             .set_parent(battlefield_root.single())
             .add_child(ball);
@@ -820,7 +802,7 @@ pub fn game_is_going(survivor_count: Res<SurvivorCount>) -> bool {
 struct AutoTimer(Timer);
 impl Default for AutoTimer {
     fn default() -> Self {
-        Self(Timer::from_seconds(2.0, TimerMode::Once))
+        Self(Timer::from_seconds(1.0, TimerMode::Repeating))
     }
 }
 #[allow(dead_code)]
@@ -846,15 +828,14 @@ fn auto_elimination(
 fn auto_fire(mut writer: EventWriter<TriggerEvent>, mut timer: ResMut<AutoTimer>, time: Res<Time>) {
     timer.tick(time.delta());
     if timer.just_finished() {
-        for _ in 0..64 {
-            writer.send(TriggerEvent {
-                participant: Participant::A,
-                trigger_type: TriggerType::Multiply,
-            });
-        }
+        let shot_type = if thread_rng().gen_bool(0.5) {
+            TriggerType::ChargedShot
+        } else {
+            TriggerType::BurstShot
+        };
         writer.send(TriggerEvent {
             participant: Participant::A,
-            trigger_type: TriggerType::ChargedShot,
+            trigger_type: shot_type,
         });
     }
 }
