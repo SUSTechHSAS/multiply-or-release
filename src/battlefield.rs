@@ -6,17 +6,19 @@ use std::{
 };
 
 use bevy::{color::palettes::css, prelude::*, sprite::Mesh2dHandle, time::Stopwatch};
+use bevy_hanabi::prelude::*;
 use bevy_rapier2d::prelude::*;
 
 use crate::{
     collision_groups,
     panel_plugin::{TriggerEvent, TriggerType},
-    utils::{Participant, ParticipantMap, TileColor},
+    utils::{
+        BallColor, EffectPropertiesExt, Participant, ParticipantMap, TileColor, TileHitEffect,
+    },
 };
 
 // Constants {{{
 
-const TILE_BORDER_COLOR: Color = Color::BLACK;
 const TILE_COUNT: usize = 100;
 const TILE_DIMENSION: f32 = BATTLEFIELD_HALF_WIDTH / TILE_COUNT as f32;
 pub const BATTLEFIELD_HALF_WIDTH: f32 = 360.0;
@@ -43,9 +45,9 @@ const ONE_SHOT_PROTECTION_THRESHOLD: u64 = 10;
 const ONE_SHOT_DAMAGE_THRESHOLD: u64 = 1024;
 
 // Z-index
-const TILE_Z: f32 = 10.0;
+const TILE_Z: f32 = -1.0;
 const BULLET_BALL_Z: f32 = -1.0;
-const BULLET_TEXT_Z: f32 = 20.0;
+const BULLET_TEXT_Z: f32 = 3.0;
 // Turret head is a child of turret, which inherits the z position as well, so the local z of the
 // head needs to be negative to put it behind the main turret.
 const TURRET_HEAD_Z: f32 = -1.0;
@@ -74,6 +76,7 @@ impl Plugin for BattlefieldPlugin {
                     handle_elimination
                         .run_if(on_event::<EliminationEvent>())
                         .after(handle_bullet_turret_collision),
+                    cleanup_particle_emitters.before(handle_bullet_tile_collision),
                 ),
             )
             .add_systems(
@@ -85,6 +88,27 @@ impl Plugin for BattlefieldPlugin {
     }
 }
 
+#[derive(Resource, Clone, Default)]
+struct EffectInstanceManager {
+    pool: Vec<Entity>,
+    dispatched: Vec<Entity>,
+}
+impl EffectInstanceManager {
+    fn add(&mut self, entity: Entity) {
+        self.dispatched.push(entity);
+    }
+    fn get(&mut self) -> Option<Entity> {
+        if let Some(entity) = self.pool.pop() {
+            self.dispatched.push(entity);
+            Some(entity)
+        } else {
+            None
+        }
+    }
+    fn reset(&mut self) {
+        self.pool.append(&mut self.dispatched);
+    }
+}
 #[derive(Event)]
 pub struct EliminationEvent {
     pub participant: Participant,
@@ -396,6 +420,7 @@ fn setup(
     colors: Res<ParticipantMap<TileColor>>,
     materials: Res<ParticipantMap<Handle<ColorMaterial>>>,
 ) {
+    commands.insert_resource(EffectInstanceManager::default());
     commands.insert_resource(TurretStopwatch::default());
     commands.insert_resource(SurvivorCount::default());
     const OFFSET: f32 = BATTLEFIELD_HALF_WIDTH + BATTLEFIELD_BOUNDARY_HALF_WIDTH;
@@ -427,13 +452,7 @@ fn setup(
                 combine_rule: CoefficientCombineRule::Max,
             },
             collider,
-            SpriteBundle {
-                sprite: Sprite {
-                    color: TILE_BORDER_COLOR,
-                    ..default()
-                },
-                ..default()
-            },
+            SpatialBundle::default(),
         ))
         .id();
     let battlefield = commands
@@ -747,25 +766,35 @@ fn handle_elimination(
     }
 }
 fn handle_bullet_tile_collision(
+    mut commands: Commands,
     mut events: EventReader<CollisionEvent>,
-    colors: Res<ParticipantMap<TileColor>>,
-    mut bullet_query: Query<(&Participant, &mut Charge), With<Bullet>>,
+    tile_colors: Res<ParticipantMap<TileColor>>,
+    ball_colors: Res<ParticipantMap<BallColor>>,
+    mut bullet_query: Query<(&Participant, &mut Charge, &Velocity), With<Bullet>>,
     mut tile_query: Query<
-        (&mut Participant, &mut Sprite, &mut CollisionGroups),
+        (
+            &mut Participant,
+            &mut Sprite,
+            &mut CollisionGroups,
+            &GlobalTransform,
+        ),
         (With<Tile>, Without<Bullet>),
     >,
+    effect: Res<TileHitEffect>,
+    mut effect_query: Query<(&mut EffectProperties, &mut Transform, &mut EffectSpawner)>,
+    mut instance_manager: ResMut<EffectInstanceManager>,
 ) {
     for event in events.read() {
         match event {
             &CollisionEvent::Started(a, b, _) => {
-                let (&bullet_owner, mut charge) = if let Ok(x) = bullet_query.get_mut(a) {
+                let (&bullet_owner, mut charge, velocity) = if let Ok(x) = bullet_query.get_mut(a) {
                     x
                 } else if let Ok(x) = bullet_query.get_mut(b) {
                     x
                 } else {
                     continue;
                 };
-                let (mut tile_owner, mut sprite, mut collision_group) =
+                let (mut tile_owner, mut sprite, mut collision_group, tile_transform) =
                     if let Ok(x) = tile_query.get_mut(a) {
                         x
                     } else if let Ok(x) = tile_query.get_mut(b) {
@@ -780,12 +809,28 @@ fn handle_bullet_tile_collision(
                     continue;
                 }
                 *tile_owner = bullet_owner;
-                sprite.color = colors.get(bullet_owner).0;
+                sprite.color = tile_colors.get(bullet_owner).0;
                 *collision_group = CollisionGroups::new(
                     collision_groups::tile(bullet_owner),
                     collision_groups::all_bullets_except(bullet_owner),
                 );
                 charge.value -= 1;
+                if let Some(effect_entity) = instance_manager.get() {
+                    let (mut properties, mut transform, mut spawner) = effect_query.get_mut(effect_entity).expect("entity returned by `InstanceManager` should have an `EffectProperties` component.");
+                    properties.set_spawn_color(ball_colors.get(bullet_owner).0);
+                    properties.set_bullet_vel(velocity.linvel);
+                    transform.translation = tile_transform.translation();
+                    spawner.reset();
+                } else {
+                    let entity = commands
+                        .spawn(ParticleEffectBundle {
+                            effect: ParticleEffect::new(effect.0.clone()),
+                            transform: Transform::from_translation(tile_transform.translation()),
+                            ..default()
+                        })
+                        .id();
+                    instance_manager.add(entity);
+                }
             }
             CollisionEvent::Stopped(_, _, _) => (),
         }
@@ -793,4 +838,7 @@ fn handle_bullet_tile_collision(
 }
 pub fn game_is_going(survivor_count: Res<SurvivorCount>) -> bool {
     survivor_count.0 > 1
+}
+fn cleanup_particle_emitters(mut instance_manager: ResMut<EffectInstanceManager>) {
+    instance_manager.reset();
 }
