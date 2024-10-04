@@ -37,10 +37,10 @@ struct EliminationTextBundle {
     timer: EliminationTextTimer,
 }
 impl EliminationTextBundle {
-    fn new(participant_name: &'static str, color: Color) -> Self {
+    fn new(participant: impl std::fmt::Display, color: Color) -> Self {
         EliminationTextBundle {
             text_bundle: TextBundle::from_section(
-                format!("{} Eliminated", participant_name),
+                format!("{} Eliminated", participant),
                 TextStyle {
                     font: default(),
                     font_size: ELIMINATION_TEXT_FONT_SIZE,
@@ -76,13 +76,12 @@ fn add_elimination_text(
     mut commands: Commands,
     mut events: EventReader<EliminationEvent>,
     colors: Res<ParticipantMap<BallColor>>,
-    names: Res<ParticipantMap<&'static str>>,
     ui_root: Query<Entity, With<UIRoot>>,
 ) {
     for event in events.read() {
         commands
             .spawn(EliminationTextBundle::new(
-                names.get(event.participant),
+                event.participant,
                 colors.get(event.participant).0,
             ))
             .set_parent(ui_root.single());

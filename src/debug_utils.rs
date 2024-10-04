@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 use bevy::prelude::*;
 use bevy_hanabi::prelude::*;
 use rand::{distributions::Uniform, prelude::*};
@@ -19,14 +21,12 @@ impl Plugin for DebugUtilsPlugin {
 }
 
 #[derive(Resource, Deref, DerefMut)]
-#[allow(dead_code)]
 struct AutoTimer(Timer);
 impl Default for AutoTimer {
     fn default() -> Self {
         Self(Timer::from_seconds(2.0, TimerMode::Repeating))
     }
 }
-#[allow(dead_code)]
 fn auto_hanabi(
     mut commands: Commands,
     mut timer: ResMut<AutoTimer>,
@@ -62,7 +62,6 @@ fn auto_hanabi(
         });
     }
 }
-#[allow(dead_code)]
 fn auto_elimination(
     mut writer: EventWriter<EliminationEvent>,
     mut timer: ResMut<AutoTimer>,
@@ -81,7 +80,6 @@ fn auto_elimination(
         });
     }
 }
-#[allow(dead_code)]
 fn auto_fire(mut writer: EventWriter<TriggerEvent>, mut timer: ResMut<AutoTimer>, time: Res<Time>) {
     timer.tick(time.delta());
     if timer.just_finished() {
@@ -96,7 +94,6 @@ fn auto_fire(mut writer: EventWriter<TriggerEvent>, mut timer: ResMut<AutoTimer>
         });
     }
 }
-#[allow(dead_code)]
 fn auto_multiply(
     mut writer: EventWriter<TriggerEvent>,
     mut timer: ResMut<AutoTimer>,

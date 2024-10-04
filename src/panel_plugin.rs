@@ -18,7 +18,7 @@ use rand::{
     rngs::ThreadRng,
     thread_rng, Rng,
 };
-use std::time::Duration;
+use std::{borrow::Cow, time::Duration};
 
 // Constants {{{
 
@@ -155,6 +155,7 @@ struct TriggerZoneBundle {
     collision_groups: CollisionGroups,
     trigger_type: TriggerType,
     markers: (ActiveEvents, Sensor),
+    name: Name,
 }
 impl TriggerZoneBundle {
     fn new(trigger_type: TriggerType, size: Vec2, translation: Vec3, color: Color) -> Self {
@@ -168,6 +169,7 @@ impl TriggerZoneBundle {
                 },
                 ..default()
             },
+            name: Name::new(format!("Trigger Zone: {}", trigger_type)),
             collider: Collider::cuboid(0.5, 0.5),
             collision_groups: CollisionGroups::new(
                 collision_groups::PANEL_TRIGGER_ZONES,
@@ -202,6 +204,7 @@ struct WorkerBallBundle {
     rigidbody: RigidBody,
     velocity: Velocity,
     gravity: GravityScale,
+    name: Name,
 }
 impl WorkerBallBundle {
     fn new(
@@ -214,6 +217,7 @@ impl WorkerBallBundle {
         effect: Handle<EffectAsset>,
     ) -> Self {
         Self {
+            name: Name::new("Worker Ball"),
             marker: WorkerBall,
             participant,
             material,
@@ -270,6 +274,7 @@ struct ObstacleBundle {
     /// Rapier rigidbody component. We'll set this to static since we don't want these to move, but
     /// we'd other balls to bounce off it.
     rigidbody: RigidBody,
+    name: Name,
 }
 #[derive(Debug, Clone, Default)]
 struct ObstacleBundleBuilder {
@@ -279,6 +284,7 @@ struct ObstacleBundleBuilder {
     mesh: Option<Mesh2dHandle>,
     /// Rapier collider component.
     collider: Option<Collider>,
+    name: Option<Name>,
 }
 impl ObstacleBundleBuilder {
     fn new() -> Self {
@@ -305,12 +311,17 @@ impl ObstacleBundleBuilder {
         self.collider = Some(collider);
         self
     }
+    fn name(mut self, name: impl Into<Cow<'static, str>>) -> Self {
+        self.name = Some(Name::new(name));
+        self
+    }
     fn build(self) -> Option<ObstacleBundle> {
         let ObstacleBundleBuilder {
             translation: Vec3 { x, y, z },
             material: Some(material),
             mesh: Some(mesh),
             collider: Some(collider),
+            name: Some(name),
         } = self
         else {
             return None;
@@ -328,6 +339,7 @@ impl ObstacleBundleBuilder {
                 collision_groups::PANEL_BALLS,
             ),
             rigidbody: RigidBody::Fixed,
+            name,
         })
     }
     /// Build trust me bro.
@@ -394,6 +406,7 @@ fn setup(
         ))
         .id();
     let circle_builder = ObstacleBundleBuilder::new()
+        .name("Circle Obstacle")
         .z(CIRCLE_Z)
         .material(materials.add(CIRCLE_COLOR))
         .mesh(meshes.add(Circle::new(CIRCLE_RADIUS)))
@@ -401,6 +414,7 @@ fn setup(
 
     let length = TRIGGER_ZONE_DIVIDER_HEIGHT_OFFSET + TRIGGER_ZONE_HEIGHT;
     let divider_builder = ObstacleBundleBuilder::new()
+        .name("Trigger Zone Divider")
         .z(TRIGGER_ZONE_DIVIDER_Z)
         .material(materials.add(TRIGGER_ZONE_DIVIDER_COLOR))
         .mesh(meshes.add(Capsule2d::new(TRIGGER_ZONE_DIVIDER_RADIUS, length)))
@@ -529,6 +543,10 @@ fn setup(
                 },
                 ..default()
             })
+            .insert(Name::new(format!(
+                "Trigger Zone Text: {}",
+                TriggerType::Multiply
+            )))
             .set_parent(root);
 
         commands
@@ -566,6 +584,10 @@ fn setup(
                 },
                 ..default()
             })
+            .insert(Name::new(format!(
+                "Trigger Zone Text: {}",
+                TriggerType::BurstShot
+            )))
             .set_parent(root);
 
         commands
@@ -603,6 +625,10 @@ fn setup(
                 },
                 ..default()
             })
+            .insert(Name::new(format!(
+                "Trigger Zone Text: {}",
+                TriggerType::ChargedShot
+            )))
             .set_parent(root);
 
         commands
@@ -618,6 +644,7 @@ fn setup(
                 },
                 ..default()
             })
+            .insert(Name::new("Panel Wall"))
             .set_parent(root);
         commands
             .spawn(SpriteBundle {
@@ -632,6 +659,7 @@ fn setup(
                 },
                 ..default()
             })
+            .insert(Name::new("Panel Background"))
             .set_parent(root);
     };
     f(left_root);

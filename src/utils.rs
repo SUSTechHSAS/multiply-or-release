@@ -9,8 +9,6 @@ const PARTICIPANT_COLORS: ParticipantMap<Srgba> =
     ParticipantMap::new(css::MAROON, css::DARK_GREEN, css::PURPLE, css::GOLD);
 const BALL_COLORS: ParticipantMap<Srgba> =
     ParticipantMap::new(css::RED, css::GREEN, css::VIOLET, css::YELLOW);
-const PARTICIPANT_NAME: ParticipantMap<&'static str> =
-    ParticipantMap::new("RED", "GREEN", "VIOLET", "YELLOW");
 
 const HIT_PARTICLE_LIFETIME: f32 = 2.;
 const HIT_PARTICLE_SIZE: f32 = WORKER_BALL_RADIUS * 2.0;
@@ -84,6 +82,17 @@ pub enum Participant {
     C,
     D,
 }
+impl std::fmt::Display for Participant {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let name = match self {
+            Participant::A => "RED",
+            Participant::B => "GREEN",
+            Participant::C => "VIOLET",
+            Participant::D => "YELLOW",
+        };
+        f.write_str(name)
+    }
+}
 #[derive(Clone, Resource)]
 pub struct TileHitEffect(pub Handle<EffectAsset>);
 #[derive(Clone, Resource)]
@@ -100,7 +109,6 @@ impl Default for EffectLifetimeTimer {
 }
 
 fn setup_participant_maps(mut commands: Commands, mut materials: ResMut<Assets<ColorMaterial>>) {
-    commands.insert_resource(PARTICIPANT_NAME);
     commands.insert_resource(PARTICIPANT_COLORS.map(Color::Srgba).map(TileColor));
     commands.insert_resource(BALL_COLORS.map(Color::Srgba).map(BallColor));
     commands.insert_resource(

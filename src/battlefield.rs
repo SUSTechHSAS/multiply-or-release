@@ -139,6 +139,7 @@ struct TileBundle {
     collision_groups: CollisionGroups,
     /// The game participant that owns this tile.
     owner: Participant,
+    name: Name,
 }
 impl TileBundle {
     fn new(owner: Participant, color: Color, x: f32, y: f32) -> Self {
@@ -159,6 +160,7 @@ impl TileBundle {
                 collision_groups::all_bullets_except(owner),
             ),
             owner,
+            name: Name::new("Tile"),
         }
     }
 }
@@ -210,6 +212,7 @@ impl Charge {
 #[derive(Bundle)]
 struct ChargeBallBundle {
     matmesh: ColorMesh2dBundle,
+    name: Name,
 }
 impl ChargeBallBundle {
     fn new(mesh: Mesh2dHandle, material: Handle<ColorMaterial>) -> Self {
@@ -220,6 +223,7 @@ impl ChargeBallBundle {
                 material,
                 ..default()
             },
+            name: Name::new("Charge Ball"),
         }
     }
 }
@@ -252,6 +256,7 @@ struct BulletBundle {
     /// The game participant that owns this bullet.
     owner: Participant,
     text_bundle: Text2dBundle,
+    name: Name,
 }
 impl BulletBundle {
     fn new(
@@ -265,6 +270,7 @@ impl BulletBundle {
         let direction = Vec2::from_angle(firing_angle);
         Self {
             owner,
+            name: Name::new("Bullet"),
             charge,
             link: ChargeBallLink(ball),
             markers: (
@@ -327,12 +333,15 @@ struct TurretBundle {
     collider: Collider,
     collision_groups: CollisionGroups,
     collider_scale: ColliderScale,
+    active_events: ActiveEvents,
+    name: Name,
 }
 impl TurretBundle {
     fn new(owner: Participant, x: f32, y: f32, ball: Entity, platform: Entity) -> Self {
         Self {
             owner,
             sensor: Sensor,
+            name: Name::new(format!("Turret: {}", owner)),
             firing_queue: FiringQueue::default(),
             charge: Charge::default(),
             link: ChargeBallLink(ball),
@@ -343,6 +352,7 @@ impl TurretBundle {
                 collision_groups::all_bullets_except(owner),
             ),
             collider_scale: ColliderScale::Absolute(Vect::splat(1.0)),
+            active_events: ActiveEvents::COLLISION_EVENTS,
             text_bundle: Text2dBundle {
                 transform: Transform::from_xyz(x, y, BULLET_TEXT_Z),
                 text: Text::from_section(
@@ -360,20 +370,19 @@ impl TurretBundle {
 }
 /// Marker to indicate the entity is a turret head.
 #[derive(Component)]
-struct TurretHead;
-/// Component bundle for the turret head (the little ball that sits on the top of the turret to
-/// show its charge level and never moves).
+struct TurretBarrel;
 #[derive(Bundle)]
-struct TurretHeadBundle {
+struct TurretBarrelBundle {
     /// Marker to indicate that this is a turret head.
-    marker: TurretHead,
-    /// Bevy rendering component used to display the ball.
+    marker: TurretBarrel,
     sprite_bundle: SpriteBundle,
+    name: Name,
 }
-impl TurretHeadBundle {
+impl TurretBarrelBundle {
     fn new() -> Self {
         Self {
-            marker: TurretHead,
+            marker: TurretBarrel,
+            name: Name::new("Turret Barrel"),
             sprite_bundle: SpriteBundle {
                 sprite: Sprite {
                     color: TURRET_HEAD_COLOR,
@@ -397,13 +406,14 @@ struct BarrelOffset(f32);
 /// Component bundle for a turret.
 #[derive(Bundle, Default)]
 struct TurretPlatformBundle {
-    /// Bevy rendering component used to display the ball.
     barrel_offset: BarrelOffset,
     spatial: SpatialBundle,
+    name: Name,
 }
 impl TurretPlatformBundle {
     fn new(base_offset: f32) -> Self {
         Self {
+            name: Name::new("Turret Platform"),
             barrel_offset: BarrelOffset(base_offset),
             spatial: SpatialBundle::from_transform(Transform::from_xyz(
                 0.0,
@@ -489,7 +499,9 @@ fn setup(
             .spawn(TurretPlatformBundle::new(base_offset))
             .set_parent(root)
             .id();
-        commands.spawn(TurretHeadBundle::new()).set_parent(platform);
+        commands
+            .spawn(TurretBarrelBundle::new())
+            .set_parent(platform);
         commands
             .spawn(TurretBundle::new(owner, x, y, ball, platform))
             .set_parent(root)
@@ -828,6 +840,7 @@ fn handle_bullet_tile_collision(
                             transform: Transform::from_translation(tile_transform.translation()),
                             ..default()
                         })
+                        .insert(Name::new("Tile Hit Particle Spawner"))
                         .id();
                     instance_manager.add(entity);
                 }
