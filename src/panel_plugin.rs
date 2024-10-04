@@ -675,6 +675,7 @@ fn spawn_workers(
     rapier: Res<RapierContext>,
     materials: Res<ParticipantMap<Handle<ColorMaterial>>>,
     colors: Res<ParticipantMap<TileColor>>,
+    survivors: Res<ParticipantMap<bool>>,
     root: Query<(Entity, &GlobalTransform, &PanelRoot)>,
     effect: Res<TrailEffect>,
 ) {
@@ -691,37 +692,57 @@ fn spawn_workers(
             &rapier,
             &collider,
         );
-        let mut xa;
-        let mut xb;
-        loop {
-            xa = caster.get();
-            xb = caster.get();
-            if (xa - xb).abs() > WORKER_BALL_DIAMETER {
-                break;
+        match (survivors[a].then_some(a), survivors[b].then_some(b)) {
+            (None, None) => (),
+            (Some(survivor), None) | (None, Some(survivor)) => {
+                let x = caster.get();
+                commands
+                    .spawn(WorkerBallBundle::new(
+                        survivor,
+                        x,
+                        root_translation.x,
+                        spawner.mesh.clone(),
+                        materials.get(survivor).clone(),
+                        colors.get(survivor).0,
+                        effect.0.clone(),
+                    ))
+                    .set_parent(root_entity);
+                unimplemented!()
+            }
+            (Some(a), Some(b)) => {
+                let mut xa;
+                let mut xb;
+                loop {
+                    xa = caster.get();
+                    xb = caster.get();
+                    if (xa - xb).abs() > WORKER_BALL_DIAMETER {
+                        break;
+                    }
+                }
+                commands
+                    .spawn(WorkerBallBundle::new(
+                        a,
+                        xa,
+                        root_translation.x,
+                        spawner.mesh.clone(),
+                        materials.get(a).clone(),
+                        colors.get(a).0,
+                        effect.0.clone(),
+                    ))
+                    .set_parent(root_entity);
+                commands
+                    .spawn(WorkerBallBundle::new(
+                        b,
+                        xb,
+                        root_translation.x,
+                        spawner.mesh.clone(),
+                        materials.get(b).clone(),
+                        colors.get(b).0,
+                        effect.0.clone(),
+                    ))
+                    .set_parent(root_entity);
             }
         }
-        commands
-            .spawn(WorkerBallBundle::new(
-                a,
-                xa,
-                root_translation.x,
-                spawner.mesh.clone(),
-                materials.get(a).clone(),
-                colors.get(a).0,
-                effect.0.clone(),
-            ))
-            .set_parent(root_entity);
-        commands
-            .spawn(WorkerBallBundle::new(
-                b,
-                xb,
-                root_translation.x,
-                spawner.mesh.clone(),
-                materials.get(b).clone(),
-                colors.get(b).0,
-                effect.0.clone(),
-            ))
-            .set_parent(root_entity);
     };
     let &[root0, root1] = root.into_iter().collect::<Vec<_>>().as_slice() else {
         panic!("{}", EXPECT_TWO_PANELS_MSG);

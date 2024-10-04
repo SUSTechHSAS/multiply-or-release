@@ -766,13 +766,15 @@ fn handle_elimination(
     mut commands: Commands,
     mut events: EventReader<EliminationEvent>,
     mut survivor_count: ResMut<SurvivorCount>,
+    mut survivors: ResMut<ParticipantMap<bool>>,
     participant_entity_query: Query<(Entity, &Participant), (Without<Tile>, Without<Bullet>)>,
 ) {
     for event in events.read() {
+        survivors.set(event.participant, false);
         survivor_count.0 -= 1;
-        for (e, &p) in &participant_entity_query {
-            if p == event.participant {
-                commands.entity(e).despawn_recursive();
+        for (entity, &participant) in &participant_entity_query {
+            if participant == event.participant {
+                commands.entity(entity).despawn_recursive();
             }
         }
     }
