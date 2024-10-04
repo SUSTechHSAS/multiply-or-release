@@ -325,13 +325,13 @@ enum ShotType {
 struct FiringQueue(VecDeque<(ShotType, Charge)>);
 #[derive(Bundle)]
 struct TurretBundle {
-    sensor: Sensor,
     firing_queue: FiringQueue,
     charge: Charge,
     link: ChargeBallLink,
     platform: TurretPlatformLink,
     text_bundle: Text2dBundle,
     owner: Participant,
+    rb: RigidBody,
     collider: Collider,
     collision_groups: CollisionGroups,
     collider_scale: ColliderScale,
@@ -342,12 +342,12 @@ impl TurretBundle {
     fn new(owner: Participant, x: f32, y: f32, ball: Entity, platform: Entity) -> Self {
         Self {
             owner,
-            sensor: Sensor,
             name: Name::new(format!("Turret: {}", owner)),
             firing_queue: FiringQueue::default(),
             charge: Charge::default(),
             link: ChargeBallLink(ball),
             platform: TurretPlatformLink(platform),
+            rb: RigidBody::Fixed,
             collider: Collider::ball(1.0),
             collision_groups: CollisionGroups::new(
                 collision_groups::turret(owner),
@@ -708,37 +708,33 @@ fn handle_trigger_events(
 }
 fn handle_bullet_turret_collision(
     mut collision_event_reader: EventReader<CollisionEvent>,
-    mut bullet_query: Query<(&Participant, &mut Charge, &mut Velocity), With<Bullet>>,
+    mut bullet_query: Query<(&Participant, &mut Charge), With<Bullet>>,
     mut turret_query: Query<(&Participant, &mut Charge), (With<FiringQueue>, Without<Bullet>)>,
 ) {
     for event in collision_event_reader.read() {
-        match event {
-            &CollisionEvent::Started(a, b, _) => {
-                let (&bullet_owner, mut bullet_charge, mut velocity) =
-                    if let Ok(x) = bullet_query.get_mut(a) {
-                        x
-                    } else if let Ok(x) = bullet_query.get_mut(b) {
-                        x
-                    } else {
-                        continue;
-                    };
-                let (&turret_owner, mut turret_charge) = if let Ok(x) = turret_query.get_mut(a) {
-                    x
-                } else if let Ok(x) = turret_query.get_mut(b) {
-                    x
-                } else {
-                    continue;
-                };
-                if turret_owner == bullet_owner {
-                    continue;
-                }
-                let min_value = bullet_charge.value.min(turret_charge.value);
-                bullet_charge.value -= min_value;
-                turret_charge.value -= min_value;
-                velocity.linvel *= -1.0;
-            }
-            CollisionEvent::Stopped(_, _, _) => (),
+        let &CollisionEvent::Started(a, b, _) = event else {
+            continue;
+        };
+        let (&bullet_owner, mut bullet_charge) = if let Ok(x) = bullet_query.get_mut(a) {
+            x
+        } else if let Ok(x) = bullet_query.get_mut(b) {
+            x
+        } else {
+            continue;
+        };
+        let (&turret_owner, mut turret_charge) = if let Ok(x) = turret_query.get_mut(a) {
+            x
+        } else if let Ok(x) = turret_query.get_mut(b) {
+            x
+        } else {
+            continue;
+        };
+        if turret_owner == bullet_owner {
+            continue;
         }
+        let min_value = bullet_charge.value.min(turret_charge.value);
+        bullet_charge.value -= min_value;
+        turret_charge.value -= min_value;
     }
 }
 fn handle_elimination(
