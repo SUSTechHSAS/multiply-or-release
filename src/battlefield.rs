@@ -41,9 +41,6 @@ const BULLET_RESTITUTION_COEFFICIENT: f32 = 0.75;
 const CHARGED_SHOT_BULLET_SPEED: f32 = 250.0;
 const BURST_SHOT_BULLET_SPEED: f32 = 500.0;
 
-const ONE_SHOT_PROTECTION_THRESHOLD: u64 = 10;
-const ONE_SHOT_DAMAGE_THRESHOLD: u64 = 1024;
-
 // Z-index
 const TILE_Z: f32 = -1.0;
 const BULLET_BALL_Z: f32 = -1.0;
@@ -75,7 +72,7 @@ impl Plugin for BattlefieldPlugin {
                     update_charge_ball.after(update_charge_level),
                     handle_elimination
                         .run_if(on_event::<EliminationEvent>())
-                        .after(handle_bullet_turret_collision),
+                        .after(update_charge_level),
                     cleanup_particle_emitters.before(handle_bullet_tile_collision),
                 ),
             )
@@ -112,6 +109,11 @@ impl EffectInstanceManager {
 #[derive(Event)]
 pub struct EliminationEvent {
     pub participant: Participant,
+}
+impl EliminationEvent {
+    fn new(participant: Participant) -> Self {
+        Self { participant }
+    }
 }
 #[derive(Resource)]
 pub struct SurvivorCount(pub u8);
@@ -533,14 +535,17 @@ fn rotate_turret(
 }
 fn update_charge_level(
     mut commands: Commands,
-    mut query: Query<(Entity, &mut Charge), Changed<Charge>>,
+    mut query: Query<(Entity, &mut Charge, &Participant, Option<&FiringQueue>), Changed<Charge>>,
+    mut event_writer: EventWriter<EliminationEvent>,
 ) {
-    for (entity, mut charge) in &mut query {
-        if charge.value == 0 {
+    for (entity, mut charge, &participant, firing_queue) in &mut query {
+        if charge.value > 0 {
+            charge.update_level();
+        } else if firing_queue.is_some() {
+            event_writer.send(EliminationEvent::new(participant));
+        } else {
             commands.entity(entity).despawn_recursive();
-            continue;
         }
-        charge.update_level();
     }
 }
 fn update_charge_ball(
@@ -702,16 +707,14 @@ fn handle_trigger_events(
     }
 }
 fn handle_bullet_turret_collision(
-    mut commands: Commands,
     mut collision_event_reader: EventReader<CollisionEvent>,
-    mut elimination_event_writer: EventWriter<EliminationEvent>,
-    mut bullet_query: Query<(Entity, &Participant, &mut Charge, &mut Velocity), With<Bullet>>,
+    mut bullet_query: Query<(&Participant, &mut Charge, &mut Velocity), With<Bullet>>,
     mut turret_query: Query<(&Participant, &mut Charge), (With<FiringQueue>, Without<Bullet>)>,
 ) {
     for event in collision_event_reader.read() {
         match event {
             &CollisionEvent::Started(a, b, _) => {
-                let (bullet_entity, &bullet_owner, mut bullet_charge, mut velocity) =
+                let (&bullet_owner, mut bullet_charge, mut velocity) =
                     if let Ok(x) = bullet_query.get_mut(a) {
                         x
                     } else if let Ok(x) = bullet_query.get_mut(b) {
@@ -729,34 +732,10 @@ fn handle_bullet_turret_collision(
                 if turret_owner == bullet_owner {
                     continue;
                 }
-                if bullet_charge.value < turret_charge.value {
-                    turret_charge.value -= bullet_charge.value;
-                    commands.entity(bullet_entity).despawn_recursive();
-                } else {
-                    bullet_charge.value -= turret_charge.value;
-                    let mut kill = || {
-                        elimination_event_writer.send(EliminationEvent {
-                            participant: turret_owner,
-                        });
-                    };
-                    if turret_charge.level < ONE_SHOT_PROTECTION_THRESHOLD {
-                        kill();
-                    } else if bullet_charge.value > ONE_SHOT_DAMAGE_THRESHOLD {
-                        bullet_charge.value = bullet_charge
-                            .value
-                            .saturating_sub(ONE_SHOT_DAMAGE_THRESHOLD);
-                        if bullet_charge.value == 0 {
-                            kill();
-                            commands.entity(bullet_entity).despawn_recursive();
-                        }
-                    } else {
-                        turret_charge.reset();
-                    }
-                    velocity.linvel *= -1.0;
-                }
                 let min_value = bullet_charge.value.min(turret_charge.value);
                 bullet_charge.value -= min_value;
                 turret_charge.value -= min_value;
+                velocity.linvel *= -1.0;
             }
             CollisionEvent::Stopped(_, _, _) => (),
         }
