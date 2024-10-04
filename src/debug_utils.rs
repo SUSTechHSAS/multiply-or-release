@@ -13,10 +13,10 @@ use crate::{
 pub struct DebugUtilsPlugin;
 impl Plugin for DebugUtilsPlugin {
     fn build(&self, app: &mut App) {
-        app.add_plugins(bevy_inspector_egui::quick::WorldInspectorPlugin::new());
-        // app.add_plugins(bevy_rapier2d::render::RapierDebugRenderPlugin::default())
-        // .insert_resource(AutoTimer::default())
-        // .add_systems(Update, (auto_hanabi, auto_fire));
+        app.add_plugins(bevy_inspector_egui::quick::WorldInspectorPlugin::new())
+            // app.add_plugins(bevy_rapier2d::render::RapierDebugRenderPlugin::default())
+            .insert_resource(AutoTimer::default())
+            .add_systems(Update, auto_elimination);
     }
 }
 
@@ -24,7 +24,7 @@ impl Plugin for DebugUtilsPlugin {
 struct AutoTimer(Timer);
 impl Default for AutoTimer {
     fn default() -> Self {
-        Self(Timer::from_seconds(2.0, TimerMode::Repeating))
+        Self(Timer::from_seconds(10.0, TimerMode::Once))
     }
 }
 fn auto_hanabi(

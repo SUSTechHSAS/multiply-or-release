@@ -18,6 +18,9 @@ const HIT_PARTICLE_COUNT: f32 = 16.0;
 const HIT_PARTICLE_MAX_PER_SECOND: f32 = 1024.0;
 const TRAIL_SPAWN_RATE: f32 = 60.;
 const TRAIL_LIFETIME: f32 = 0.5;
+pub const SPAWN_COLOR_PROPERTY: &str = "spawn_color";
+const POSITION_PROPERTY: &str = "position";
+const BULLET_VEL_PROPERTY: &str = "bullet_vel";
 
 // }}}
 
@@ -173,7 +176,7 @@ fn setup_tile_hit_effect(mut commands: Commands, mut effects: ResMut<Assets<Effe
     // when the particle spawns. The particle will keep that color afterward,
     // even if the property changes, because the color will be saved
     // per-particle (due to the Attribute::COLOR).
-    let spawn_color = writer.add_property("spawn_color", 0xFFFFFFFFu32.into());
+    let spawn_color = writer.add_property(SPAWN_COLOR_PROPERTY, 0xFFFFFFFFu32.into());
     let init_color = SetAttributeModifier::new(Attribute::COLOR, writer.prop(spawn_color).expr());
 
     let gradient = Gradient::linear(Vec2::ONE, Vec2::ZERO);
@@ -187,7 +190,7 @@ fn setup_tile_hit_effect(mut commands: Commands, mut effects: ResMut<Assets<Effe
         dimension: ShapeDimension::Volume,
     };
 
-    let bullet_vel_prop = writer.add_property("bullet_vel", Vec2::ZERO.into());
+    let bullet_vel_prop = writer.add_property(BULLET_VEL_PROPERTY, Vec2::ZERO.into());
     let bullet_vel = writer.prop(bullet_vel_prop);
     let bullet_vel3 = bullet_vel.clone().x().vec3(bullet_vel.y(), writer.lit(0.));
     let vel = writer
@@ -225,8 +228,8 @@ fn setup_tile_hit_effect(mut commands: Commands, mut effects: ResMut<Assets<Effe
 fn setup_trail_effect(mut commands: Commands, mut effects: ResMut<Assets<EffectAsset>>) {
     let writer = ExprWriter::default();
 
-    let pos = writer.add_property("position", Vec3::ZERO.into());
-    let spawn_color = writer.add_property("spawn_color", 0xFFFFFFFFu32.into());
+    let pos = writer.add_property(POSITION_PROPERTY, Vec3::ZERO.into());
+    let spawn_color = writer.add_property(SPAWN_COLOR_PROPERTY, 0xFFFFFFFFu32.into());
 
     let init_position_attr = SetAttributeModifier {
         attribute: Attribute::POSITION,
@@ -255,7 +258,7 @@ fn setup_trail_effect(mut commands: Commands, mut effects: ResMut<Assets<EffectA
 
     let init_color = SetAttributeModifier {
         attribute: Attribute::COLOR,
-        value: writer.prop(spawn_color).expr(),
+        value: writer.lit(LinearRgba::NONE.as_u32()).expr(),
     };
 
     let clone1_modifier = CloneModifier::new(1.0 / TRAIL_SPAWN_RATE, 1);
@@ -286,7 +289,10 @@ fn setup_trail_effect(mut commands: Commands, mut effects: ResMut<Assets<EffectA
     // gradient.add_key(1.0, Vec2::ZERO);
 
     let alpha_offset = age_ratio
-        .smoothstep(writer.lit(0.0), writer.lit(1.0))
+        .smoothstep(
+            writer.lit(0.0),
+            writer.prop(spawn_color).unpack4x8unorm().w(),
+        )
         .mul(writer.lit(Vec4::new(0.0, 0.0, 0.0, 1.0)))
         .pack4x8unorm();
     let color = writer.prop(spawn_color).sub(alpha_offset);

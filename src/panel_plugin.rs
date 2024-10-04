@@ -3,7 +3,7 @@
 use crate::{
     battlefield::game_is_going,
     collision_groups::{self, PANEL_OBSTACLES, PANEL_TRIGGER_ZONES},
-    utils::{EffectPropertiesExt, ParticipantMap, TileColor, TrailEffect},
+    utils::{EffectPropertiesExt, ParticipantMap, TileColor, TrailEffect, SPAWN_COLOR_PROPERTY},
     Participant,
 };
 use bevy::{
@@ -62,7 +62,7 @@ const CIRCLE_GRID_HORIZONTAL_HALF_COUNT_ODD_ROW: usize = 3;
 pub const WORKER_BALL_RADIUS: f32 = 5.0;
 const WORKER_BALL_SPAWN_Y: f32 = 320.0;
 const WORKER_BALL_RESTITUTION_COEFFICIENT: f32 = 0.5;
-const WORKER_BALL_SPAWN_TIMER_SECS: f32 = 10.0;
+const WORKER_BALL_SPAWN_TIMER_SECS: f32 = 1.0;
 pub const WORKER_BALL_COUNT_MAX: usize = 10;
 const WORKER_BALL_GRAVITY_SCALE: f32 = 15.0;
 
@@ -105,14 +105,10 @@ impl Plugin for PanelPlugin {
                 Update,
                 spawn_workers.run_if(game_is_going.and_then(spawn_workers_condition)),
             )
+            .add_systems(Update, (trigger_event, ball_reset).run_if(game_is_going))
             .add_systems(
                 Update,
-                (
-                    trigger_event,
-                    ball_reset,
-                    update_workers_particle_position.before(spawn_workers),
-                )
-                    .run_if(game_is_going),
+                update_workers_particle_position.before(spawn_workers),
             );
     }
 }
@@ -181,6 +177,34 @@ impl TriggerZoneBundle {
     }
     // }}}
 }
+#[derive(Component, Clone, Copy)]
+struct WorkerBallTrail(Entity);
+#[derive(Bundle, Clone)]
+struct WorkerBallTrailBundle {
+    // {{{
+    link: WorkerBallTrail,
+    peb: ParticleEffectBundle,
+    name: Name,
+}
+impl WorkerBallTrailBundle {
+    fn new(
+        target: Entity,
+        target_x: f32,
+        color: impl Into<LinearRgba>,
+        effect: Handle<EffectAsset>,
+    ) -> Self {
+        Self {
+            link: WorkerBallTrail(target),
+            peb: ParticleEffectBundle {
+                effect: ParticleEffect::new(effect),
+                effect_properties: EffectProperties::from_spawn_color(color)
+                    .with_position(target_x, WORKER_BALL_SPAWN_Y),
+                ..default()
+            },
+            name: Name::new("Worker Ball Trail"),
+        }
+    }
+}
 #[derive(Component, Clone, Copy, Default)]
 /// Marker to mark this entity as a worker ball.
 struct WorkerBall;
@@ -195,9 +219,7 @@ struct WorkerBallBundle {
     // {{{
     marker: WorkerBall,
     participant: Participant,
-    mesh: Mesh2dHandle,
-    material: Handle<ColorMaterial>,
-    peb: ParticleEffectBundle,
+    matmesh: MaterialMesh2dBundle<ColorMaterial>,
     collider: Collider,
     collision_groups: CollisionGroups,
     restitution: Restitution,
@@ -210,22 +232,16 @@ impl WorkerBallBundle {
     fn new(
         participant: Participant,
         x: f32,
-        root_x: f32,
         mesh: Mesh2dHandle,
         material: Handle<ColorMaterial>,
-        color: impl Into<LinearRgba>,
-        effect: Handle<EffectAsset>,
     ) -> Self {
         Self {
             name: Name::new("Worker Ball"),
             marker: WorkerBall,
             participant,
-            material,
-            mesh,
-            peb: ParticleEffectBundle {
-                effect: ParticleEffect::new(effect),
-                effect_properties: EffectProperties::from_spawn_color(color)
-                    .with_position(x + root_x, WORKER_BALL_SPAWN_Y),
+            matmesh: MaterialMesh2dBundle {
+                material,
+                mesh,
                 transform: Transform::from_xyz(x, WORKER_BALL_SPAWN_Y, WORKER_BALL_Z),
                 ..default()
             },
@@ -696,18 +712,21 @@ fn spawn_workers(
             (None, None) => (),
             (Some(survivor), None) | (None, Some(survivor)) => {
                 let x = caster.get();
-                commands
+                let ball = commands
                     .spawn(WorkerBallBundle::new(
                         survivor,
                         x,
-                        root_translation.x,
                         spawner.mesh.clone(),
                         materials.get(survivor).clone(),
-                        colors.get(survivor).0,
-                        effect.0.clone(),
                     ))
-                    .set_parent(root_entity);
-                unimplemented!()
+                    .set_parent(root_entity)
+                    .id();
+                commands.spawn(WorkerBallTrailBundle::new(
+                    ball,
+                    x + root_translation.x,
+                    colors.get(survivor).0,
+                    effect.0.clone(),
+                ));
             }
             (Some(a), Some(b)) => {
                 let mut xa;
@@ -719,28 +738,36 @@ fn spawn_workers(
                         break;
                     }
                 }
-                commands
+                let ball_a = commands
                     .spawn(WorkerBallBundle::new(
                         a,
                         xa,
-                        root_translation.x,
                         spawner.mesh.clone(),
                         materials.get(a).clone(),
-                        colors.get(a).0,
-                        effect.0.clone(),
                     ))
-                    .set_parent(root_entity);
-                commands
+                    .set_parent(root_entity)
+                    .id();
+                commands.spawn(WorkerBallTrailBundle::new(
+                    ball_a,
+                    xa + root_translation.x,
+                    colors.get(a).0,
+                    effect.0.clone(),
+                ));
+                let ball_b = commands
                     .spawn(WorkerBallBundle::new(
                         b,
                         xb,
-                        root_translation.x,
                         spawner.mesh.clone(),
                         materials.get(b).clone(),
-                        colors.get(b).0,
-                        effect.0.clone(),
                     ))
-                    .set_parent(root_entity);
+                    .set_parent(root_entity)
+                    .id();
+                commands.spawn(WorkerBallTrailBundle::new(
+                    ball_b,
+                    xb + root_translation.x,
+                    colors.get(b).0,
+                    effect.0.clone(),
+                ));
             }
         }
     };
@@ -757,10 +784,21 @@ fn spawn_workers(
     spawner.counter += 1;
 }
 fn update_workers_particle_position(
-    mut query: Query<(&GlobalTransform, &mut EffectProperties), With<WorkerBall>>,
+    transform_query: Query<&GlobalTransform>,
+    mut query: Query<(&WorkerBallTrail, &mut EffectProperties)>,
 ) {
-    for (transform, mut properties) in &mut query {
-        properties.set_position(transform.translation());
+    for (&WorkerBallTrail(ball_entity), mut properties) in &mut query {
+        if let Ok(transform) = transform_query.get(ball_entity) {
+            properties.set_position(transform.translation());
+        } else {
+            // Despawning the particle effect causes immense lag for some reason,
+            // so instead we just leave it running but make it invisible
+            EffectProperties::set_if_changed(
+                properties,
+                SPAWN_COLOR_PROPERTY,
+                LinearRgba::NONE.as_u32().into(),
+            );
+        }
     }
 }
 fn trigger_event(
