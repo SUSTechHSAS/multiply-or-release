@@ -30,7 +30,7 @@ const TURRET_POSITION: f32 = 330.0;
 const TURRET_HEAD_COLOR: Color = Color::Srgba(css::DARK_GRAY);
 const TURRET_HEAD_THICNESS: f32 = 3.0;
 const TURRET_HEAD_LENGTH: f32 = 50.0;
-const TURRET_ROTATION_SPEED: f32 = 1.0;
+const TURRET_ROTATION_SPEED: f32 = 0.75;
 
 const MULTI_SHOT_CHARGE_OFFSET: u64 = 5;
 
@@ -181,7 +181,7 @@ impl TileBundle {
 struct TurretStopwatch(Stopwatch);
 impl TurretStopwatch {
     fn get(&self) -> f32 {
-        FRAC_PI_2 - ((self.0.elapsed_secs() % PI * TURRET_ROTATION_SPEED) % PI - FRAC_PI_2).abs()
+        (self.0.elapsed_secs() * TURRET_ROTATION_SPEED) % (2.0 * PI)
     }
 }
 #[derive(Component, Deref, Clone, Copy)]
