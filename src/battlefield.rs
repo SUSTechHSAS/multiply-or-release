@@ -24,10 +24,12 @@ const TILE_DIMENSION: f32 = BATTLEFIELD_HALF_WIDTH / TILE_COUNT as f32;
 pub const BATTLEFIELD_HALF_WIDTH: f32 = 360.0;
 const BATTLEFIELD_BOUNDARY_HALF_WIDTH: f32 = 50.0;
 
-const TURRET_POSITION: f32 = 350.0;
+const INITIAL_TURRET_CHARGE_VALUE: u64 = 1;
+const INITIAL_TURRET_CHARGE_LEVEL: u64 = 1;
+const TURRET_POSITION: f32 = 330.0;
 const TURRET_HEAD_COLOR: Color = Color::Srgba(css::DARK_GRAY);
-const TURRET_HEAD_THICNESS: f32 = 2.5;
-const TURRET_HEAD_LENGTH: f32 = 75.0;
+const TURRET_HEAD_THICNESS: f32 = 3.0;
+const TURRET_HEAD_LENGTH: f32 = 50.0;
 const TURRET_ROTATION_SPEED: f32 = 1.0;
 
 const MULTI_SHOT_CHARGE_OFFSET: u64 = 4;
@@ -36,10 +38,13 @@ const BULLET_TEXT_COLOR: Color = Color::BLACK;
 const BULLET_TEXT_FONT_SIZE_ASPECT: f32 = 0.5;
 const BULLET_MINIMUM_TEXT_SIZE: f32 = 8.0;
 const BULLET_SIZE_FACTOR: f32 = 2.0;
-const BULLET_MASS_FACTOR: f64 = 1.0;
+const BULLET_DENSITY: f32 = 1.0;
 const BULLET_RESTITUTION_COEFFICIENT: f32 = 0.75;
 const CHARGED_SHOT_BULLET_SPEED: f32 = 250.0;
 const BURST_SHOT_BULLET_SPEED: f32 = 500.0;
+
+/// If `Charge.value <= QUADRUPLE_THRESHOLD` then it gets quadrupled rather than doubled.
+const QUADRUPLE_THRESHOLD: u64 = 256;
 
 // Z-index
 const TILE_Z: f32 = -1.0;
@@ -61,14 +66,14 @@ impl Plugin for BattlefieldPlugin {
                 Update,
                 (
                     rotate_turret,
-                    handle_trigger_events
-                        .run_if(game_is_going)
-                        .after(handle_bullet_turret_collision),
                     handle_bullet_tile_collision,
                     handle_bullet_turret_collision
                         .run_if(game_is_going)
                         .after(handle_bullet_tile_collision),
-                    update_charge_level.after(handle_bullet_turret_collision),
+                    handle_trigger_events
+                        .run_if(game_is_going)
+                        .after(handle_bullet_turret_collision),
+                    update_charge_level.after(handle_trigger_events),
                     update_charge_ball.after(update_charge_level),
                     handle_elimination
                         .run_if(on_event::<EliminationEvent>())
@@ -182,7 +187,10 @@ struct Charge {
 }
 impl Default for Charge {
     fn default() -> Self {
-        Self { value: 1, level: 1 }
+        Self {
+            value: INITIAL_TURRET_CHARGE_VALUE,
+            level: INITIAL_TURRET_CHARGE_LEVEL,
+        }
     }
 }
 impl Charge {
@@ -195,17 +203,20 @@ impl Charge {
         self.level = (self.value as f64).log2().ceil() as u64 + 1;
     }
     fn multiply(&mut self) {
-        if let Some(value) = self.value.checked_mul(4) {
+        let factor = if self.value <= QUADRUPLE_THRESHOLD {
+            4
+        } else {
+            2
+        };
+        if let Some(value) = self.value.checked_mul(factor) {
             self.value = value;
-            self.level += 2;
         } else {
             self.value = u64::MAX;
-            self.update_level()
         }
     }
     fn reset(&mut self) {
-        self.value = 1;
-        self.level = 1;
+        self.value = INITIAL_TURRET_CHARGE_VALUE;
+        self.level = INITIAL_TURRET_CHARGE_LEVEL;
     }
     fn get_scale(&self) -> f32 {
         self.level as f32 * BULLET_SIZE_FACTOR
@@ -300,7 +311,7 @@ impl BulletBundle {
             collider_scale: ColliderScale::Absolute(Vect::splat(1.0)),
             velocity: Velocity::linear(direction * bullet_speed),
             rigidbody: RigidBody::Dynamic,
-            mass: ColliderMassProperties::Mass((charge.value as f64 * BULLET_MASS_FACTOR) as f32),
+            mass: ColliderMassProperties::Density(BULLET_DENSITY),
             text_bundle: Text2dBundle {
                 transform: Transform::from_translation(position.extend(BULLET_TEXT_Z)),
                 text: Text::from_section(

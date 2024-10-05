@@ -7,10 +7,14 @@ use crate::panel_plugin::{WORKER_BALL_COUNT_MAX, WORKER_BALL_RADIUS};
 
 // Constants {{{
 
-const PARTICIPANT_COLORS: ParticipantMap<Srgba> =
-    ParticipantMap::new(css::MAROON, css::DARK_GREEN, css::PURPLE, css::GOLD);
+const PARTICIPANT_COLORS: ParticipantMap<Srgba> = ParticipantMap::new(
+    css::MAROON,
+    css::DARK_GREEN,
+    css::PURPLE,
+    css::DARK_GOLDENROD,
+);
 const BALL_COLORS: ParticipantMap<Srgba> =
-    ParticipantMap::new(css::RED, css::GREEN, css::VIOLET, css::YELLOW);
+    ParticipantMap::new(css::RED, css::LIMEGREEN, css::VIOLET, css::YELLOW);
 
 const HIT_PARTICLE_LIFETIME: f32 = 2.;
 const HIT_PARTICLE_SIZE: f32 = WORKER_BALL_RADIUS * 2.0;

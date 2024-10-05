@@ -35,9 +35,9 @@ const ARENA_WIDTH: f32 = 260.0;
 
 const TRIGGER_ZONE_Y: f32 = -250.0;
 const TRIGGER_ZONE_HEIGHT: f32 = 40.0;
-const MULTIPLY_ZONE_COLOR: Color = Color::Srgba(css::LIMEGREEN);
-const BURST_SHOT_ZONE_COLOR: Color = Color::Srgba(css::ALICE_BLUE);
-const CHARGED_SHOT_ZONE_COLOR: Color = Color::Srgba(css::RED);
+const MULTIPLY_ZONE_COLOR: Color = Color::Srgba(css::ALICE_BLUE);
+const BURST_SHOT_ZONE_COLOR: Color = Color::Srgba(css::LIGHT_SKY_BLUE);
+const CHARGED_SHOT_ZONE_COLOR: Color = Color::Srgba(css::LIGHT_PINK);
 const TRIGGER_ZONE_TEXT_COLOR: Color = Color::BLACK;
 const TRIGGER_ZONE_TEXT_SIZE: f32 = 12.0;
 
@@ -62,7 +62,7 @@ const CIRCLE_GRID_HORIZONTAL_HALF_COUNT_ODD_ROW: usize = 3;
 pub const WORKER_BALL_RADIUS: f32 = 5.0;
 const WORKER_BALL_SPAWN_Y: f32 = 320.0;
 const WORKER_BALL_RESTITUTION_COEFFICIENT: f32 = 0.5;
-const WORKER_BALL_SPAWN_TIMER_SECS: f32 = 1.0;
+const WORKER_BALL_SPAWN_TIMER_SECS: f32 = 6.0;
 pub const WORKER_BALL_COUNT_MAX: usize = 10;
 const WORKER_BALL_GRAVITY_SCALE: f32 = 15.0;
 
