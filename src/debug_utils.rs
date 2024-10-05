@@ -87,7 +87,7 @@ fn auto_fire(mut writer: EventWriter<TriggerEvent>, mut timer: ResMut<AutoTimer>
             for _ in 0..3 {
                 writer.send(TriggerEvent {
                     participant,
-                    trigger_type: TriggerType::Multiply,
+                    trigger_type: TriggerType::Multiply(4),
                 });
             }
             writer.send(TriggerEvent {
@@ -106,7 +106,7 @@ fn auto_multiply(
     if timer.just_finished() {
         writer.send(TriggerEvent {
             participant: Participant::A,
-            trigger_type: TriggerType::Multiply,
+            trigger_type: TriggerType::Multiply(4),
         });
     }
 }

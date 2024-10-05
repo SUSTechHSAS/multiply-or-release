@@ -35,9 +35,12 @@ const ARENA_WIDTH: f32 = 260.0;
 
 const TRIGGER_ZONE_Y: f32 = -250.0;
 const TRIGGER_ZONE_HEIGHT: f32 = 40.0;
-const MULTIPLY_ZONE_COLOR: Color = Color::Srgba(css::ALICE_BLUE);
-const BURST_SHOT_ZONE_COLOR: Color = Color::Srgba(css::LIGHT_SKY_BLUE);
-const CHARGED_SHOT_ZONE_COLOR: Color = Color::Srgba(css::LIGHT_PINK);
+/// The color of the center trigger zone.
+const TRIGGER_ZONE_COLOR_0: Color = Color::Srgba(css::ALICE_BLUE);
+/// The color of the trigger zones to the left and right of center.
+const TRIGGER_ZONE_COLOR_1: Color = Color::Srgba(css::LIGHT_PINK);
+/// The color of the outer trigger zones.
+const TRIGGER_ZONE_COLOR_2: Color = Color::Srgba(css::LIGHT_SKY_BLUE);
 const TRIGGER_ZONE_TEXT_COLOR: Color = Color::BLACK;
 const TRIGGER_ZONE_TEXT_SIZE: f32 = 12.0;
 
@@ -49,8 +52,8 @@ const CIRCLE_PYRAMID_VERTICAL_GAP: f32 = 8.0;
 const CIRCLE_PYRAMID_HORIZONTAL_GAP: f32 = 45.0;
 
 const TRIGGER_ZONE_DIVIDER_COLOR: Color = Color::srgb(0.8, 0.8, 0.8);
-const TRIGGER_ZONE_DIVIDER_HEIGHT_OFFSET: f32 = 4.0;
-const TRIGGER_ZONE_DIVIDER_RADIUS: f32 = 5.0;
+const TRIGGER_ZONE_DIVIDER_HEIGHT_OFFSET: f32 = 2.5;
+const TRIGGER_ZONE_DIVIDER_RADIUS: f32 = 2.5;
 
 const CIRCLE_GRID_VERTICAL_OFFSET: f32 = 70.0;
 const CIRCLE_GRID_VERTICAL_COUNT: usize = 8;
@@ -62,8 +65,8 @@ const CIRCLE_GRID_HORIZONTAL_HALF_COUNT_ODD_ROW: usize = 3;
 pub const WORKER_BALL_RADIUS: f32 = 5.0;
 const WORKER_BALL_SPAWN_Y: f32 = 320.0;
 const WORKER_BALL_RESTITUTION_COEFFICIENT: f32 = 0.5;
-const WORKER_BALL_SPAWN_TIMER_SECS: f32 = 6.0;
-pub const WORKER_BALL_COUNT_MAX: usize = 10;
+const WORKER_BALL_SPAWN_TIMER_SECS: f32 = 10.0;
+pub const WORKER_BALL_COUNT_MAX: usize = 6;
 const WORKER_BALL_GRAVITY_SCALE: f32 = 15.0;
 
 // Z-index
@@ -80,8 +83,8 @@ const WALL_HEIGHT: f32 = ARENA_HEIGHT + 2.0 * WALL_THICKNESS;
 const WALL_WIDTH: f32 = ARENA_WIDTH + 2.0 * WALL_THICKNESS;
 const ARENA_HEIGHT_FRAC_2: f32 = ARENA_HEIGHT / 2.0;
 const ARENA_WIDTH_FRAC_2: f32 = ARENA_WIDTH / 2.0;
-const ARENA_WIDTH_FRAC_4: f32 = ARENA_WIDTH / 4.0;
-const ARENA_WIDTH_FRAC_8: f32 = ARENA_WIDTH / 8.0;
+const ARENA_WIDTH_FRAC_5: f32 = ARENA_WIDTH / 5.0;
+const ARENA_WIDTH_FRAC_10: f32 = ARENA_WIDTH / 10.0;
 
 const CIRCLE_HALF_GAP: f32 = CIRCLE_PYRAMID_HORIZONTAL_GAP / 2.0;
 const CIRCLE_DIAMETER: f32 = CIRCLE_RADIUS * 2.0;
@@ -120,14 +123,14 @@ pub struct TriggerEvent {
 }
 #[derive(Debug, Component, Clone, Copy)]
 pub enum TriggerType {
-    Multiply,
+    Multiply(u8),
     BurstShot,
     ChargedShot,
 }
 impl std::fmt::Display for TriggerType {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::Multiply => write!(f, "Multiply"),
+            Self::Multiply(factor) => write!(f, "x{}", factor),
             Self::BurstShot => write!(f, "Release\nBurst\nShots"),
             Self::ChargedShot => write!(f, "Release\nChanged\nShots"),
         }
@@ -518,7 +521,7 @@ fn setup(
             .spawn(
                 divider_builder
                     .clone()
-                    .xy(-ARENA_WIDTH_FRAC_4, TRIGGER_ZONE_Y)
+                    .xy(-ARENA_WIDTH_FRAC_10, TRIGGER_ZONE_Y)
                     .buildtmb(),
             )
             .set_parent(root);
@@ -526,126 +529,80 @@ fn setup(
             .spawn(
                 divider_builder
                     .clone()
-                    .xy(ARENA_WIDTH_FRAC_4, TRIGGER_ZONE_Y)
+                    .xy(-ARENA_WIDTH_FRAC_5 - ARENA_WIDTH_FRAC_10, TRIGGER_ZONE_Y)
                     .buildtmb(),
             )
             .set_parent(root);
         commands
-            .spawn(TriggerZoneBundle::new(
-                TriggerType::Multiply,
-                Vec2::new(ARENA_WIDTH_FRAC_2, TRIGGER_ZONE_HEIGHT),
-                Vec3::new(0.0, TRIGGER_ZONE_Y, TRIGGER_ZONE_Z),
-                MULTIPLY_ZONE_COLOR,
-            ))
+            .spawn(
+                divider_builder
+                    .clone()
+                    .xy(ARENA_WIDTH_FRAC_10, TRIGGER_ZONE_Y)
+                    .buildtmb(),
+            )
             .set_parent(root);
         commands
-            .spawn(Text2dBundle {
-                text: Text::from_section(
-                    TriggerType::Multiply.to_string(),
-                    TextStyle {
-                        color: TRIGGER_ZONE_TEXT_COLOR,
-                        font_size: TRIGGER_ZONE_TEXT_SIZE,
+            .spawn(
+                divider_builder
+                    .clone()
+                    .xy(ARENA_WIDTH_FRAC_5 + ARENA_WIDTH_FRAC_10, TRIGGER_ZONE_Y)
+                    .buildtmb(),
+            )
+            .set_parent(root);
+        let mut f = |trigger_type, x, color| {
+            commands
+                .spawn(TriggerZoneBundle::new(
+                    trigger_type,
+                    Vec2::new(ARENA_WIDTH_FRAC_5, TRIGGER_ZONE_HEIGHT),
+                    Vec3::new(x, TRIGGER_ZONE_Y, TRIGGER_ZONE_Z),
+                    color,
+                ))
+                .set_parent(root);
+            commands
+                .spawn(Text2dBundle {
+                    text: Text::from_section(
+                        trigger_type.to_string(),
+                        TextStyle {
+                            color: TRIGGER_ZONE_TEXT_COLOR,
+                            font_size: TRIGGER_ZONE_TEXT_SIZE,
+                            ..default()
+                        },
+                    )
+                    .with_justify(JustifyText::Center),
+                    transform: Transform {
+                        translation: Vec3 {
+                            x,
+                            y: TRIGGER_ZONE_Y,
+                            z: TRIGGER_ZONE_TEXT_OFFSET_Z,
+                        },
                         ..default()
                     },
-                )
-                .with_justify(JustifyText::Center),
-                transform: Transform {
-                    translation: Vec3 {
-                        x: 0.0,
-                        y: TRIGGER_ZONE_Y,
-                        z: TRIGGER_ZONE_TEXT_OFFSET_Z,
-                    },
                     ..default()
-                },
-                ..default()
-            })
-            .insert(Name::new(format!(
-                "Trigger Zone Text: {}",
-                TriggerType::Multiply
-            )))
-            .set_parent(root);
-
-        commands
-            .spawn(TriggerZoneBundle::new(
-                TriggerType::BurstShot,
-                Vec2::new(ARENA_WIDTH_FRAC_4, TRIGGER_ZONE_HEIGHT),
-                Vec3::new(
-                    ARENA_WIDTH_FRAC_4 + ARENA_WIDTH_FRAC_8,
-                    TRIGGER_ZONE_Y,
-                    TRIGGER_ZONE_Z,
-                ),
-                BURST_SHOT_ZONE_COLOR,
-            ))
-            .set_parent(root);
-        commands
-            .spawn(Text2dBundle {
-                text: Text::from_section(
-                    TriggerType::BurstShot.to_string(),
-                    TextStyle {
-                        color: TRIGGER_ZONE_TEXT_COLOR,
-                        font_size: TRIGGER_ZONE_TEXT_SIZE,
-                        ..default()
-                    },
-                )
-                .with_justify(JustifyText::Center),
-                transform: Transform {
-                    translation: Vec3 {
-                        x: ARENA_WIDTH_FRAC_4
-                            + ARENA_WIDTH_FRAC_8
-                            + TRIGGER_ZONE_DIVIDER_RADIUS / 2.0,
-                        y: TRIGGER_ZONE_Y,
-                        z: TRIGGER_ZONE_TEXT_OFFSET_Z,
-                    },
-                    ..default()
-                },
-                ..default()
-            })
-            .insert(Name::new(format!(
-                "Trigger Zone Text: {}",
-                TriggerType::BurstShot
-            )))
-            .set_parent(root);
-
-        commands
-            .spawn(TriggerZoneBundle::new(
-                TriggerType::ChargedShot,
-                Vec2::new(ARENA_WIDTH_FRAC_4, TRIGGER_ZONE_HEIGHT),
-                Vec3::new(
-                    -ARENA_WIDTH_FRAC_4 - ARENA_WIDTH_FRAC_8,
-                    TRIGGER_ZONE_Y,
-                    TRIGGER_ZONE_Z,
-                ),
-                CHARGED_SHOT_ZONE_COLOR,
-            ))
-            .set_parent(root);
-        commands
-            .spawn(Text2dBundle {
-                text: Text::from_section(
-                    TriggerType::ChargedShot.to_string(),
-                    TextStyle {
-                        color: TRIGGER_ZONE_TEXT_COLOR,
-                        font_size: TRIGGER_ZONE_TEXT_SIZE,
-                        ..default()
-                    },
-                )
-                .with_justify(JustifyText::Center),
-                transform: Transform {
-                    translation: Vec3 {
-                        x: -ARENA_WIDTH_FRAC_4
-                            - ARENA_WIDTH_FRAC_8
-                            - TRIGGER_ZONE_DIVIDER_RADIUS / 2.0,
-                        y: TRIGGER_ZONE_Y,
-                        z: TRIGGER_ZONE_TEXT_OFFSET_Z,
-                    },
-                    ..default()
-                },
-                ..default()
-            })
-            .insert(Name::new(format!(
-                "Trigger Zone Text: {}",
-                TriggerType::ChargedShot
-            )))
-            .set_parent(root);
+                })
+                .insert(Name::new(format!("Trigger Zone Text: {}", trigger_type)))
+                .set_parent(root);
+        };
+        f(TriggerType::Multiply(4), 0.0, TRIGGER_ZONE_COLOR_0);
+        f(
+            TriggerType::Multiply(2),
+            -ARENA_WIDTH_FRAC_5,
+            TRIGGER_ZONE_COLOR_1,
+        );
+        f(
+            TriggerType::Multiply(2),
+            ARENA_WIDTH_FRAC_5,
+            TRIGGER_ZONE_COLOR_1,
+        );
+        f(
+            TriggerType::BurstShot,
+            -2.0 * ARENA_WIDTH_FRAC_5,
+            TRIGGER_ZONE_COLOR_2,
+        );
+        f(
+            TriggerType::ChargedShot,
+            2.0 * ARENA_WIDTH_FRAC_5,
+            TRIGGER_ZONE_COLOR_2,
+        );
 
         commands
             .spawn(SpriteBundle {

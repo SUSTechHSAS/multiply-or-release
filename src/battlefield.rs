@@ -45,9 +45,6 @@ const BULLET_RESTITUTION_COEFFICIENT: f32 = 0.75;
 const CHARGED_SHOT_BULLET_SPEED: f32 = 250.0;
 const BURST_SHOT_BULLET_SPEED: f32 = 500.0;
 
-/// If `Charge.value <= QUADRUPLE_THRESHOLD` then it gets quadrupled rather than doubled.
-const QUADRUPLE_THRESHOLD: u64 = 256;
-
 // Z-index
 const TILE_Z: f32 = -1.0;
 const BULLET_BALL_Z: f32 = -1.0;
@@ -208,13 +205,8 @@ impl Charge {
     fn update_level(&mut self) {
         self.level = (self.value as f64).log2().ceil() as u64 + 1;
     }
-    fn multiply(&mut self) {
-        let factor = if self.value <= QUADRUPLE_THRESHOLD {
-            4
-        } else {
-            2
-        };
-        if let Some(value) = self.value.checked_mul(factor) {
+    fn multiply(&mut self, factor: u8) {
+        if let Some(value) = self.value.checked_mul(factor as u64) {
             self.value = value;
         } else {
             self.value = u64::MAX;
@@ -738,7 +730,7 @@ fn handle_trigger_events(
             continue;
         };
         match event.trigger_type {
-            TriggerType::Multiply => charge.multiply(),
+            TriggerType::Multiply(factor) => charge.multiply(factor),
             TriggerType::BurstShot => {
                 turret.push_front((ShotType::Multi, *charge));
                 charge.reset();
