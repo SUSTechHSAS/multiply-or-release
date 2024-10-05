@@ -10,7 +10,7 @@ use bevy_hanabi::prelude::*;
 use bevy_rapier2d::prelude::*;
 
 use crate::{
-    collision_groups,
+    collision_groups::{self, all_new_bullets_except},
     panel_plugin::{TriggerEvent, TriggerType},
     utils::{
         BallColor, EffectPropertiesExt, Participant, ParticipantMap, TileColor, TileHitEffect,
@@ -32,8 +32,10 @@ const TURRET_HEAD_THICNESS: f32 = 3.0;
 const TURRET_HEAD_LENGTH: f32 = 50.0;
 const TURRET_ROTATION_SPEED: f32 = 1.0;
 
-const MULTI_SHOT_CHARGE_OFFSET: u64 = 4;
+const MULTI_SHOT_CHARGE_OFFSET: u64 = 5;
 
+/// The width of a rectangular area at the corner where the `NEW_BULLET` tag will not be dropped.
+const NEW_BULLET_PHASE_RANGE: f32 = 2.0 * (BATTLEFIELD_HALF_WIDTH - TURRET_POSITION);
 const BULLET_TEXT_COLOR: Color = Color::BLACK;
 const BULLET_TEXT_FONT_SIZE_ASPECT: f32 = 0.5;
 const BULLET_MINIMUM_TEXT_SIZE: f32 = 8.0;
@@ -83,9 +85,12 @@ impl Plugin for BattlefieldPlugin {
             )
             .add_systems(
                 FixedUpdate,
-                fire_shots
-                    .run_if(game_is_going)
-                    .after(handle_trigger_events),
+                (
+                    update_bullets_solver_groups.before(fire_shots),
+                    fire_shots
+                        .run_if(game_is_going)
+                        .after(handle_trigger_events),
+                ),
             );
     }
 }
@@ -164,7 +169,8 @@ impl TileBundle {
             collider: Collider::cuboid(0.5, 0.5),
             collision_groups: CollisionGroups::new(
                 collision_groups::tile(owner),
-                collision_groups::all_bullets_except(owner),
+                collision_groups::all_bullets_except(owner)
+                    | collision_groups::all_new_bullets_except(owner),
             ),
             owner,
             name: Name::new("Tile"),
@@ -242,14 +248,17 @@ impl ChargeBallBundle {
 }
 #[derive(Resource, Deref)]
 struct BulletMesh(Mesh2dHandle);
-#[derive(Component)]
+#[derive(Clone, Copy, Component)]
 struct Bullet;
+#[derive(Clone, Copy, Component)]
+struct NewBullet;
 /// Component bundle for the bullets that the turrets fire.
 #[derive(Bundle)]
 struct BulletBundle {
     /// Marker to mark this entity as a bullet.
     markers: (
         Bullet,
+        NewBullet,
         GravityScale,
         Friction,
         Restitution,
@@ -261,6 +270,7 @@ struct BulletBundle {
     /// Rapier collider component.
     collider: Collider,
     collision_groups: CollisionGroups,
+    solver_groups: SolverGroups,
     collider_scale: ColliderScale,
     velocity: Velocity,
     /// Rapier rigidbody component, used by the physics engine to move the entity.
@@ -288,6 +298,7 @@ impl BulletBundle {
             link: ChargeBallLink(ball),
             markers: (
                 Bullet,
+                NewBullet,
                 GravityScale(0.0),
                 Friction {
                     coefficient: 0.0,
@@ -302,11 +313,18 @@ impl BulletBundle {
             ),
             collider: Collider::ball(1.0),
             collision_groups: CollisionGroups::new(
-                collision_groups::bullet(owner),
+                collision_groups::new_bullet(owner),
                 collision_groups::BATTLEFIELD_ROOT
                     | collision_groups::ALL_BULLETS
-                    | collision_groups::all_tiles_except(owner)
-                    | collision_groups::all_turrets_except(owner),
+                    | collision_groups::ALL_NEW_BULLETS
+                    | collision_groups::ALL_TURRETS
+                    | collision_groups::all_tiles_except(owner),
+            ),
+            solver_groups: SolverGroups::new(
+                collision_groups::new_bullet(owner),
+                collision_groups::BATTLEFIELD_ROOT
+                    | collision_groups::ALL_BULLETS
+                    | collision_groups::all_new_bullets_except(owner),
             ),
             collider_scale: ColliderScale::Absolute(Vect::splat(1.0)),
             velocity: Velocity::linear(direction * bullet_speed),
@@ -362,7 +380,7 @@ impl TurretBundle {
             collider: Collider::ball(1.0),
             collision_groups: CollisionGroups::new(
                 collision_groups::turret(owner),
-                collision_groups::all_bullets_except(owner),
+                collision_groups::ALL_BULLETS | collision_groups::all_new_bullets_except(owner),
             ),
             collider_scale: ColliderScale::Absolute(Vect::splat(1.0)),
             active_events: ActiveEvents::COLLISION_EVENTS,
@@ -468,7 +486,7 @@ fn setup(
             RigidBody::Fixed,
             CollisionGroups::new(
                 collision_groups::BATTLEFIELD_ROOT,
-                collision_groups::ALL_BULLETS,
+                collision_groups::ALL_BULLETS | collision_groups::ALL_NEW_BULLETS,
             ),
             Restitution {
                 coefficient: 1.0,
@@ -598,24 +616,62 @@ fn update_charge_ball(
         }
     }
 }
-fn fire_shots(
+fn update_bullets_solver_groups(
     mut commands: Commands,
     rapier: Res<RapierContext>,
+    mut bullet_query: Query<
+        (
+            Entity,
+            &mut CollisionGroups,
+            &mut SolverGroups,
+            &Participant,
+            &Transform,
+        ),
+        With<NewBullet>,
+    >,
+) {
+    for (entity, mut collision_groups, mut solver_groups, &participant, transform) in
+        &mut bullet_query
+    {
+        if BATTLEFIELD_HALF_WIDTH - transform.translation.x.abs() < NEW_BULLET_PHASE_RANGE
+            && BATTLEFIELD_HALF_WIDTH - transform.translation.y.abs() < NEW_BULLET_PHASE_RANGE
+        {
+            continue;
+        }
+        if !rapier
+            .contact_pairs_with(entity)
+            .any(|x| x.has_any_active_contact())
+        {
+            collision_groups.memberships = collision_groups::bullet(participant);
+            collision_groups.filters = collision_groups::BATTLEFIELD_ROOT
+                | collision_groups::ALL_BULLETS
+                | collision_groups::ALL_NEW_BULLETS
+                | collision_groups::ALL_TURRETS
+                | collision_groups::all_tiles_except(participant);
+            solver_groups.memberships = collision_groups::bullet(participant);
+            solver_groups.filters = collision_groups::BATTLEFIELD_ROOT
+                | collision_groups::ALL_BULLETS
+                | collision_groups::ALL_NEW_BULLETS
+                | collision_groups::ALL_TURRETS;
+            commands.entity(entity).remove::<NewBullet>();
+        }
+    }
+}
+fn fire_shots(
+    mut commands: Commands,
     mesh: Res<BulletMesh>,
     materials: Res<ParticipantMap<Handle<ColorMaterial>>>,
     turret_stopwatch: Res<TurretStopwatch>,
     mut turrets: Query<(
         &mut FiringQueue,
         &Transform,
-        &GlobalTransform,
         &Participant,
         &TurretPlatformLink,
     )>,
     platform_query: Query<&BarrelOffset>,
     battlefield_root: Query<Entity, With<BattlefieldRoot>>,
 ) {
-    for (mut turret, transform, global_transform, &owner, &TurretPlatformLink(link)) in &mut turrets
-    {
+    for (mut turret, transform, &owner, &TurretPlatformLink(link)) in &mut turrets {
         let Some((shot_type, charge)) = turret.pop_back() else {
             continue;
         };
@@ -625,29 +681,11 @@ fn fire_shots(
             let abs_offset = absx - absx.min(BATTLEFIELD_HALF_WIDTH - radius);
             Vec2::new(translation.x.signum(), translation.y.signum()) * abs_offset
         };
-        let shape_cast = |radius: f32, offset: Vec2| {
-            rapier
-                .intersection_with_shape(
-                    global_transform.translation().xy() - offset,
-                    0.0,
-                    &Collider::ball(radius),
-                    QueryFilter::only_dynamic().groups(CollisionGroups::new(
-                        collision_groups::bullet(owner),
-                        collision_groups::ALL_BULLETS,
-                    )),
-                )
-                .is_some()
-        };
         let (charge, offset, bullet_speed) = match shot_type {
             ShotType::Charged => {
                 let radius = charge.get_scale();
                 let offset = get_offset(radius);
-                if shape_cast(radius, offset) {
-                    turret.push_back((shot_type, charge));
-                    continue;
-                } else {
-                    (charge, offset, CHARGED_SHOT_BULLET_SPEED)
-                }
+                (charge, offset, CHARGED_SHOT_BULLET_SPEED)
             }
             ShotType::Multi => {
                 let shot_value = match charge.level.checked_sub(MULTI_SHOT_CHARGE_OFFSET) {
@@ -657,21 +695,16 @@ fn fire_shots(
                 let shot = Charge::from_value(shot_value);
                 let radius = shot.get_scale();
                 let offset = get_offset(radius);
-                if shape_cast(radius, offset) {
-                    turret.push_back((shot_type, charge));
-                    continue;
-                } else {
-                    let mut charge = charge;
-                    match charge.value.checked_sub(shot.value) {
-                        None | Some(0) => (),
-                        Some(remaining_value) => {
-                            charge.value = remaining_value;
-                            charge.update_level();
-                            turret.push_back((shot_type, charge));
-                        }
+                let mut charge = charge;
+                match charge.value.checked_sub(shot.value) {
+                    None | Some(0) => (),
+                    Some(remaining_value) => {
+                        charge.value = remaining_value;
+                        charge.update_level();
+                        turret.push_back((shot_type, charge));
                     }
-                    (shot, offset, BURST_SHOT_BULLET_SPEED)
                 }
+                (shot, offset, BURST_SHOT_BULLET_SPEED)
             }
         };
         let &BarrelOffset(base_angle) = platform_query.get(link).unwrap();
@@ -696,11 +729,11 @@ fn fire_shots(
 }
 fn handle_trigger_events(
     mut reader: EventReader<TriggerEvent>,
-    participants: Res<ParticipantMap<Entity>>,
+    turret_entities: Res<ParticipantMap<Entity>>,
     mut turret_query: Query<(&mut Charge, &mut FiringQueue)>,
 ) {
     for event in reader.read() {
-        let &entity = participants.get(event.participant);
+        let &entity = turret_entities.get(event.participant);
         let Ok((mut charge, mut turret)) = turret_query.get_mut(entity) else {
             continue;
         };
@@ -812,7 +845,8 @@ fn handle_bullet_tile_collision(
                 sprite.color = tile_colors.get(bullet_owner).0;
                 *collision_group = CollisionGroups::new(
                     collision_groups::tile(bullet_owner),
-                    collision_groups::all_bullets_except(bullet_owner),
+                    collision_groups::all_bullets_except(bullet_owner)
+                        | all_new_bullets_except(bullet_owner),
                 );
                 charge.value -= 1;
                 if let Some(effect_entity) = instance_manager.get() {

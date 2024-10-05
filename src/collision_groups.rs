@@ -20,10 +20,17 @@ pub const TURRET_B: Group = Group::GROUP_13;
 pub const TURRET_C: Group = Group::GROUP_14;
 pub const TURRET_D: Group = Group::GROUP_15;
 pub const BATTLEFIELD_ROOT: Group = Group::GROUP_16;
+pub const NEW_BULLET_A: Group = Group::GROUP_17;
+pub const NEW_BULLET_B: Group = Group::GROUP_18;
+pub const NEW_BULLET_C: Group = Group::GROUP_19;
+pub const NEW_BULLET_D: Group = Group::GROUP_20;
 pub const ALL_TILES: Group =
     Group::from_bits_retain(TILE_A.bits() | TILE_B.bits() | TILE_C.bits() | TILE_D.bits());
 pub const ALL_BULLETS: Group =
     Group::from_bits_retain(BULLET_A.bits() | BULLET_B.bits() | BULLET_C.bits() | BULLET_D.bits());
+pub const ALL_NEW_BULLETS: Group = Group::from_bits_retain(
+    NEW_BULLET_A.bits() | NEW_BULLET_B.bits() | NEW_BULLET_C.bits() | NEW_BULLET_D.bits(),
+);
 pub const ALL_TURRETS: Group =
     Group::from_bits_retain(TURRET_A.bits() | TURRET_B.bits() | TURRET_C.bits() | TURRET_D.bits());
 
@@ -41,6 +48,14 @@ pub const fn bullet(participant: Participant) -> Group {
         Participant::B => BULLET_B,
         Participant::C => BULLET_C,
         Participant::D => BULLET_D,
+    }
+}
+pub const fn new_bullet(participant: Participant) -> Group {
+    match participant {
+        Participant::A => NEW_BULLET_A,
+        Participant::B => NEW_BULLET_B,
+        Participant::C => NEW_BULLET_C,
+        Participant::D => NEW_BULLET_D,
     }
 }
 pub const fn turret(participant: Participant) -> Group {
@@ -65,6 +80,14 @@ pub fn all_bullets_except(participant: Participant) -> Group {
         Participant::B => BULLET_A | BULLET_C | BULLET_D,
         Participant::C => BULLET_A | BULLET_B | BULLET_D,
         Participant::D => BULLET_A | BULLET_B | BULLET_C,
+    }
+}
+pub fn all_new_bullets_except(participant: Participant) -> Group {
+    match participant {
+        Participant::A => NEW_BULLET_B | NEW_BULLET_C | NEW_BULLET_D,
+        Participant::B => NEW_BULLET_A | NEW_BULLET_C | NEW_BULLET_D,
+        Participant::C => NEW_BULLET_A | NEW_BULLET_B | NEW_BULLET_D,
+        Participant::D => NEW_BULLET_A | NEW_BULLET_B | NEW_BULLET_C,
     }
 }
 pub fn all_turrets_except(participant: Participant) -> Group {

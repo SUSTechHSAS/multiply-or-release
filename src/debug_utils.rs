@@ -13,10 +13,10 @@ use crate::{
 pub struct DebugUtilsPlugin;
 impl Plugin for DebugUtilsPlugin {
     fn build(&self, app: &mut App) {
-        app.add_plugins(bevy_inspector_egui::quick::WorldInspectorPlugin::new())
-            // app.add_plugins(bevy_rapier2d::render::RapierDebugRenderPlugin::default())
-            .insert_resource(AutoTimer::default())
-            .add_systems(Update, auto_elimination);
+        // app.add_plugins(bevy_inspector_egui::quick::WorldInspectorPlugin::new())
+        // app.add_plugins(bevy_rapier2d::render::RapierDebugRenderPlugin::default())
+        app.insert_resource(AutoTimer::default())
+            .add_systems(Update, auto_fire);
     }
 }
 
@@ -24,7 +24,7 @@ impl Plugin for DebugUtilsPlugin {
 struct AutoTimer(Timer);
 impl Default for AutoTimer {
     fn default() -> Self {
-        Self(Timer::from_seconds(10.0, TimerMode::Once))
+        Self(Timer::from_seconds(0.7, TimerMode::Repeating))
     }
 }
 fn auto_hanabi(
@@ -83,15 +83,18 @@ fn auto_elimination(
 fn auto_fire(mut writer: EventWriter<TriggerEvent>, mut timer: ResMut<AutoTimer>, time: Res<Time>) {
     timer.tick(time.delta());
     if timer.just_finished() {
-        let shot_type = if thread_rng().gen_bool(0.5) {
-            TriggerType::ChargedShot
-        } else {
-            TriggerType::BurstShot
-        };
-        writer.send(TriggerEvent {
-            participant: Participant::A,
-            trigger_type: shot_type,
-        });
+        for participant in Participant::ALL {
+            for _ in 0..3 {
+                writer.send(TriggerEvent {
+                    participant,
+                    trigger_type: TriggerType::Multiply,
+                });
+            }
+            writer.send(TriggerEvent {
+                participant,
+                trigger_type: TriggerType::BurstShot,
+            });
+        }
     }
 }
 fn auto_multiply(

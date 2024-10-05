@@ -121,6 +121,9 @@ pub enum Participant {
     C,
     D,
 }
+impl Participant {
+    pub const ALL: [Self; 4] = [Self::A, Self::B, Self::C, Self::D];
+}
 impl std::fmt::Display for Participant {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let name = match self {
