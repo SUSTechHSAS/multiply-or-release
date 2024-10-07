@@ -24,15 +24,17 @@ const TILE_DIMENSION: f32 = BATTLEFIELD_HALF_WIDTH / TILE_COUNT as f32;
 pub const BATTLEFIELD_HALF_WIDTH: f32 = 360.0;
 const BATTLEFIELD_BOUNDARY_HALF_WIDTH: f32 = 50.0;
 
-const INITIAL_TURRET_CHARGE_VALUE: u64 = 1;
-const INITIAL_TURRET_CHARGE_LEVEL: u64 = 1;
+const BOOSTED_TURRET_CHARGE_VALUE: u64 = 16;
+/// The time in seconds after getting hit that a turret's charge will reset to 1 whenever it fires
+/// instead of [ `BOOSTED_TURRET_CHARGE_VALUE` ]
+const TURRET_BOOST_COOLDOWN: f32 = 5.0;
 const TURRET_POSITION: f32 = 330.0;
 const TURRET_HEAD_COLOR: Color = Color::Srgba(css::DARK_GRAY);
 const TURRET_HEAD_THICNESS: f32 = 3.0;
 const TURRET_HEAD_LENGTH: f32 = 50.0;
 const TURRET_ROTATION_SPEED: f32 = 0.75;
 
-const MULTI_SHOT_CHARGE_OFFSET: u64 = 5;
+const MULTI_SHOT_CHARGE_OFFSET: u64 = 8;
 
 /// The width of a rectangular area at the corner where the `NEW_BULLET` tag will not be dropped.
 const NEW_BULLET_PHASE_RANGE: f32 = 2.0 * (BATTLEFIELD_HALF_WIDTH - TURRET_POSITION);
@@ -191,19 +193,22 @@ struct Charge {
 impl Default for Charge {
     fn default() -> Self {
         Self {
-            value: INITIAL_TURRET_CHARGE_VALUE,
-            level: INITIAL_TURRET_CHARGE_LEVEL,
+            value: BOOSTED_TURRET_CHARGE_VALUE,
+            level: Self::calculate_level(BOOSTED_TURRET_CHARGE_VALUE),
         }
     }
 }
 impl Charge {
+    fn calculate_level(value: u64) -> u64 {
+        (value as f64).log2().ceil() as u64 + 1
+    }
     fn from_value(value: u64) -> Self {
         let mut v = Self { value, level: 1 };
         v.update_level();
         v
     }
     fn update_level(&mut self) {
-        self.level = (self.value as f64).log2().ceil() as u64 + 1;
+        self.level = Self::calculate_level(self.value);
     }
     fn multiply(&mut self, factor: u8) {
         if let Some(value) = self.value.checked_mul(factor as u64) {
@@ -212,9 +217,13 @@ impl Charge {
             self.value = u64::MAX;
         }
     }
+    fn reset_boosted(&mut self) {
+        self.value = BOOSTED_TURRET_CHARGE_VALUE;
+        self.update_level();
+    }
     fn reset(&mut self) {
-        self.value = INITIAL_TURRET_CHARGE_VALUE;
-        self.level = INITIAL_TURRET_CHARGE_LEVEL;
+        self.value = 1;
+        self.level = 1;
     }
     fn get_scale(&self) -> f32 {
         self.level as f32 * BULLET_SIZE_FACTOR
@@ -345,11 +354,22 @@ enum ShotType {
     Charged,
     Multi,
 }
-#[derive(Component, Default, Deref, DerefMut)]
-struct FiringQueue(VecDeque<(ShotType, Charge)>);
+#[derive(Component)]
+struct Turret {
+    firing_queue: VecDeque<(ShotType, Charge)>,
+    last_hit_timestamp: f32,
+}
+impl Default for Turret {
+    fn default() -> Self {
+        Self {
+            firing_queue: VecDeque::new(),
+            last_hit_timestamp: -TURRET_BOOST_COOLDOWN,
+        }
+    }
+}
 #[derive(Bundle)]
 struct TurretBundle {
-    firing_queue: FiringQueue,
+    firing_queue: Turret,
     charge: Charge,
     link: ChargeBallLink,
     platform: TurretPlatformLink,
@@ -367,7 +387,7 @@ impl TurretBundle {
         Self {
             owner,
             name: Name::new(format!("Turret: {}", owner)),
-            firing_queue: FiringQueue::default(),
+            firing_queue: Turret::default(),
             charge: Charge::default(),
             link: ChargeBallLink(ball),
             platform: TurretPlatformLink(platform),
@@ -559,7 +579,7 @@ fn rotate_turret(
 }
 fn update_charge_level(
     mut commands: Commands,
-    mut query: Query<(Entity, &mut Charge, &Participant, Option<&FiringQueue>), Changed<Charge>>,
+    mut query: Query<(Entity, &mut Charge, &Participant, Option<&Turret>), Changed<Charge>>,
     mut event_writer: EventWriter<EliminationEvent>,
 ) {
     for (entity, mut charge, &participant, firing_queue) in &mut query {
@@ -584,7 +604,7 @@ fn update_charge_ball(
         ),
         Or<(Changed<Charge>, Added<Charge>)>,
     >,
-    turret_query: Query<(), With<FiringQueue>>,
+    turret_query: Query<(), With<Turret>>,
     mut transform_query: Query<&mut Transform>,
 ) {
     for (mut collider_scale, mass_properties, mut text, charge, &ChargeBallLink(link), entity) in
@@ -669,17 +689,12 @@ fn fire_shots(
     mesh: Res<BulletMesh>,
     materials: Res<ParticipantMap<Handle<ColorMaterial>>>,
     turret_stopwatch: Res<TurretStopwatch>,
-    mut turrets: Query<(
-        &mut FiringQueue,
-        &Transform,
-        &Participant,
-        &TurretPlatformLink,
-    )>,
+    mut turrets: Query<(&mut Turret, &Transform, &Participant, &TurretPlatformLink)>,
     platform_query: Query<&BarrelOffset>,
     battlefield_root: Query<Entity, With<BattlefieldRoot>>,
 ) {
     for (mut turret, transform, &owner, &TurretPlatformLink(link)) in &mut turrets {
-        let Some((shot_type, charge)) = turret.pop_back() else {
+        let Some((shot_type, charge)) = turret.firing_queue.pop_back() else {
             continue;
         };
         let get_offset = |radius: f32| {
@@ -708,7 +723,7 @@ fn fire_shots(
                     Some(remaining_value) => {
                         charge.value = remaining_value;
                         charge.update_level();
-                        turret.push_back((shot_type, charge));
+                        turret.firing_queue.push_back((shot_type, charge));
                     }
                 }
                 (shot, offset, BURST_SHOT_BULLET_SPEED)
@@ -737,7 +752,8 @@ fn fire_shots(
 fn handle_trigger_events(
     mut reader: EventReader<TriggerEvent>,
     turret_entities: Res<ParticipantMap<Entity>>,
-    mut turret_query: Query<(&mut Charge, &mut FiringQueue)>,
+    mut turret_query: Query<(&mut Charge, &mut Turret)>,
+    time: Res<Time>,
 ) {
     for event in reader.read() {
         let &entity = turret_entities.get(event.participant);
@@ -747,12 +763,20 @@ fn handle_trigger_events(
         match event.trigger_type {
             TriggerType::Multiply(factor) => charge.multiply(factor),
             TriggerType::BurstShot => {
-                turret.push_front((ShotType::Multi, *charge));
-                charge.reset();
+                turret.firing_queue.push_front((ShotType::Multi, *charge));
+                if time.elapsed_seconds() - turret.last_hit_timestamp > TURRET_BOOST_COOLDOWN {
+                    charge.reset_boosted();
+                } else {
+                    charge.reset();
+                }
             }
             TriggerType::ChargedShot => {
-                turret.push_front((ShotType::Charged, *charge));
-                charge.reset();
+                turret.firing_queue.push_front((ShotType::Charged, *charge));
+                if time.elapsed_seconds() - turret.last_hit_timestamp > TURRET_BOOST_COOLDOWN {
+                    charge.reset_boosted();
+                } else {
+                    charge.reset();
+                }
             }
         }
     }
@@ -760,7 +784,11 @@ fn handle_trigger_events(
 fn handle_bullet_turret_collision(
     mut collision_event_reader: EventReader<CollisionEvent>,
     mut bullet_query: Query<(&Participant, &mut Charge), With<Bullet>>,
-    mut turret_query: Query<(&Participant, &mut Charge), (With<FiringQueue>, Without<Bullet>)>,
+    mut turret_query: Query<
+        (&Participant, &mut Charge, &mut Turret),
+        (With<Turret>, Without<Bullet>),
+    >,
+    time: Res<Time>,
 ) {
     for event in collision_event_reader.read() {
         let &CollisionEvent::Started(a, b, _) = event else {
@@ -773,7 +801,8 @@ fn handle_bullet_turret_collision(
         } else {
             continue;
         };
-        let (&turret_owner, mut turret_charge) = if let Ok(x) = turret_query.get_mut(a) {
+        let (&turret_owner, mut turret_charge, mut turret) = if let Ok(x) = turret_query.get_mut(a)
+        {
             x
         } else if let Ok(x) = turret_query.get_mut(b) {
             x
@@ -786,6 +815,7 @@ fn handle_bullet_turret_collision(
         let min_value = bullet_charge.value.min(turret_charge.value);
         bullet_charge.value -= min_value;
         turret_charge.value -= min_value;
+        turret.last_hit_timestamp = time.elapsed_seconds();
     }
 }
 fn handle_elimination(
