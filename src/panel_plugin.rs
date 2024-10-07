@@ -1,23 +1,24 @@
-use std::time::Duration;
+#![allow(clippy::type_complexity, clippy::too_many_arguments)]
 
+use crate::{
+    battlefield::game_is_going,
+    collision_groups::{self, PANEL_OBSTACLES, PANEL_TRIGGER_ZONES},
+    utils::{EffectPropertiesExt, ParticipantMap, TileColor, TrailEffect},
+    Participant,
+};
 use bevy::{
     color::palettes::css,
     prelude::*,
     sprite::{MaterialMesh2dBundle, Mesh2dHandle},
 };
+use bevy_hanabi::prelude::*;
 use bevy_rapier2d::prelude::*;
 use rand::{
     distributions::{DistIter, Distribution, Uniform},
     rngs::ThreadRng,
     thread_rng, Rng,
 };
-
-use crate::{
-    battlefield::game_is_going,
-    collision_groups::{self, PANEL_OBSTACLES, PANEL_TRIGGER_ZONES},
-    utils::ParticipantMap,
-    Participant,
-};
+use std::time::Duration;
 
 // Constants {{{
 
@@ -58,21 +59,21 @@ const CIRCLE_GRID_HORIZONTAL_GAP: f32 = 28.0;
 const CIRCLE_GRID_HORIZONTAL_HALF_COUNT_EVEN_ROW: usize = 2;
 const CIRCLE_GRID_HORIZONTAL_HALF_COUNT_ODD_ROW: usize = 3;
 
-const WORKER_BALL_RADIUS: f32 = 5.0;
+pub const WORKER_BALL_RADIUS: f32 = 5.0;
 const WORKER_BALL_SPAWN_Y: f32 = 320.0;
 const WORKER_BALL_RESTITUTION_COEFFICIENT: f32 = 0.5;
 const WORKER_BALL_SPAWN_TIMER_SECS: f32 = 10.0;
-const WORKER_BALL_COUNT_MAX: usize = 10;
+pub const WORKER_BALL_COUNT_MAX: usize = 10;
 const WORKER_BALL_GRAVITY_SCALE: f32 = 15.0;
 
 // Z-index
-const WALL_Z: f32 = 0.0;
-const ARENA_Z: f32 = 1.0;
-const CIRCLE_Z: f32 = 2.0;
-const TRIGGER_ZONE_Z: f32 = 2.0;
-const TRIGGER_ZONE_DIVIDER_Z: f32 = 3.0;
-const TRIGGER_ZONE_TEXT_OFFSET_Z: f32 = 3.0;
-const WORKER_BALL_Z: f32 = 4.0;
+const WALL_Z: f32 = -4.0;
+const ARENA_Z: f32 = -3.0;
+const CIRCLE_Z: f32 = -1.0;
+const TRIGGER_ZONE_Z: f32 = -2.0;
+const TRIGGER_ZONE_DIVIDER_Z: f32 = -1.0;
+const TRIGGER_ZONE_TEXT_OFFSET_Z: f32 = -1.0;
+const WORKER_BALL_Z: f32 = 1.0;
 
 // Calculated
 const WALL_HEIGHT: f32 = ARENA_HEIGHT + 2.0 * WALL_THICKNESS;
@@ -102,9 +103,17 @@ impl Plugin for PanelPlugin {
             .add_systems(Startup, setup)
             .add_systems(
                 Update,
-                spawn_workers.run_if(spawn_workers_condition.and_then(game_is_going)),
+                spawn_workers.run_if(game_is_going.and_then(spawn_workers_condition)),
             )
-            .add_systems(Update, (trigger_event, ball_reset).run_if(game_is_going));
+            .add_systems(
+                Update,
+                (
+                    trigger_event,
+                    ball_reset,
+                    update_workers_particle_position.before(spawn_workers),
+                )
+                    .run_if(game_is_going),
+            );
     }
 }
 
@@ -184,7 +193,9 @@ struct WorkerBallBundle {
     // {{{
     marker: WorkerBall,
     participant: Participant,
-    matmesh: MaterialMesh2dBundle<ColorMaterial>,
+    mesh: Mesh2dHandle,
+    material: Handle<ColorMaterial>,
+    peb: ParticleEffectBundle,
     collider: Collider,
     collision_groups: CollisionGroups,
     restitution: Restitution,
@@ -196,16 +207,22 @@ impl WorkerBallBundle {
     fn new(
         participant: Participant,
         x: f32,
+        root_x: f32,
         mesh: Mesh2dHandle,
         material: Handle<ColorMaterial>,
+        color: impl Into<LinearRgba>,
+        effect: Handle<EffectAsset>,
     ) -> Self {
         Self {
             marker: WorkerBall,
             participant,
-            matmesh: MaterialMesh2dBundle {
+            material,
+            mesh,
+            peb: ParticleEffectBundle {
+                effect: ParticleEffect::new(effect),
+                effect_properties: EffectProperties::from_spawn_color(color)
+                    .with_position(x + root_x, WORKER_BALL_SPAWN_Y),
                 transform: Transform::from_xyz(x, WORKER_BALL_SPAWN_Y, WORKER_BALL_Z),
-                material,
-                mesh,
                 ..default()
             },
             collider: Collider::ball(WORKER_BALL_RADIUS),
@@ -326,7 +343,7 @@ fn setup(
     mut meshes: ResMut<Assets<Mesh>>,
 ) {
     let mut timer = Timer::from_seconds(WORKER_BALL_SPAWN_TIMER_SECS, TimerMode::Repeating);
-    timer.tick(Duration::from_secs_f32(WORKER_BALL_SPAWN_TIMER_SECS));
+    timer.tick(Duration::from_secs_f32(WORKER_BALL_SPAWN_TIMER_SECS - 0.2));
     commands.insert_resource(WorkerBallSpawner {
         mesh: Mesh2dHandle(meshes.add(Circle::new(WORKER_BALL_RADIUS))),
         timer,
@@ -628,57 +645,74 @@ fn spawn_workers(
     mut spawner: ResMut<WorkerBallSpawner>,
     time: Res<Time>,
     rapier: Res<RapierContext>,
-    colors: Res<ParticipantMap<Handle<ColorMaterial>>>,
+    materials: Res<ParticipantMap<Handle<ColorMaterial>>>,
+    colors: Res<ParticipantMap<TileColor>>,
     root: Query<(Entity, &GlobalTransform, &PanelRoot)>,
+    effect: Res<TrailEffect>,
 ) {
-    if spawner.timer.just_finished() {
-        let mut f = |a, b, root_entity, root_transform: &GlobalTransform| {
-            let collider = Collider::ball(WORKER_BALL_RADIUS);
-            let mut caster = WorkerBallShapeCaster::new(
-                root_transform.translation().xy(),
-                Uniform::new(-ARENA_WIDTH_FRAC_2, ARENA_WIDTH_FRAC_2),
-                &rapier,
-                &collider,
-            );
-            let mut xa;
-            let mut xb;
-            loop {
-                xa = caster.get();
-                xb = caster.get();
-                if (xa - xb).abs() > WORKER_BALL_DIAMETER {
-                    break;
-                }
-            }
-            commands
-                .spawn(WorkerBallBundle::new(
-                    a,
-                    xa,
-                    spawner.mesh.clone(),
-                    colors.get(a).clone(),
-                ))
-                .set_parent(root_entity);
-            commands
-                .spawn(WorkerBallBundle::new(
-                    b,
-                    xb,
-                    spawner.mesh.clone(),
-                    colors.get(b).clone(),
-                ))
-                .set_parent(root_entity);
-        };
-        let &[root0, root1] = root.into_iter().collect::<Vec<_>>().as_slice() else {
-            panic!("{}", EXPECT_TWO_PANELS_MSG);
-        };
-        let (left_root, right_root) = match (root0.2 .0, root1.2 .0) {
-            (PanelRootSide::Left, PanelRootSide::Right) => (root0, root1),
-            (PanelRootSide::Right, PanelRootSide::Left) => (root1, root0),
-            _ => panic!("{}", EXPECT_EACH_PANEL_SIDE_EXIST_MSG),
-        };
-        f(Participant::A, Participant::B, left_root.0, left_root.1);
-        f(Participant::C, Participant::D, right_root.0, right_root.1);
-        spawner.counter += 1;
-    }
     spawner.timer.tick(time.delta());
+    if !spawner.timer.just_finished() {
+        return;
+    }
+    let mut f = |a, b, root_entity, root_transform: &GlobalTransform| {
+        let root_translation = root_transform.translation();
+        let collider = Collider::ball(WORKER_BALL_RADIUS);
+        let mut caster = WorkerBallShapeCaster::new(
+            root_translation.xy(),
+            Uniform::new(-ARENA_WIDTH_FRAC_2, ARENA_WIDTH_FRAC_2),
+            &rapier,
+            &collider,
+        );
+        let mut xa;
+        let mut xb;
+        loop {
+            xa = caster.get();
+            xb = caster.get();
+            if (xa - xb).abs() > WORKER_BALL_DIAMETER {
+                break;
+            }
+        }
+        commands
+            .spawn(WorkerBallBundle::new(
+                a,
+                xa,
+                root_translation.x,
+                spawner.mesh.clone(),
+                materials.get(a).clone(),
+                colors.get(a).0,
+                effect.0.clone(),
+            ))
+            .set_parent(root_entity);
+        commands
+            .spawn(WorkerBallBundle::new(
+                b,
+                xb,
+                root_translation.x,
+                spawner.mesh.clone(),
+                materials.get(b).clone(),
+                colors.get(b).0,
+                effect.0.clone(),
+            ))
+            .set_parent(root_entity);
+    };
+    let &[root0, root1] = root.into_iter().collect::<Vec<_>>().as_slice() else {
+        panic!("{}", EXPECT_TWO_PANELS_MSG);
+    };
+    let (left_root, right_root) = match (root0.2 .0, root1.2 .0) {
+        (PanelRootSide::Left, PanelRootSide::Right) => (root0, root1),
+        (PanelRootSide::Right, PanelRootSide::Left) => (root1, root0),
+        _ => panic!("{}", EXPECT_EACH_PANEL_SIDE_EXIST_MSG),
+    };
+    f(Participant::A, Participant::B, left_root.0, left_root.1);
+    f(Participant::C, Participant::D, right_root.0, right_root.1);
+    spawner.counter += 1;
+}
+fn update_workers_particle_position(
+    mut query: Query<(&GlobalTransform, &mut EffectProperties), With<WorkerBall>>,
+) {
+    for (transform, mut properties) in &mut query {
+        properties.set_position(transform.translation());
+    }
 }
 fn trigger_event(
     mut collision_events: EventReader<CollisionEvent>,
