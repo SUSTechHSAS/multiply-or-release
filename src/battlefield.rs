@@ -62,6 +62,7 @@ pub struct BattlefieldPlugin;
 impl Plugin for BattlefieldPlugin {
     fn build(&self, app: &mut App) {
         app.add_event::<EliminationEvent>()
+            .add_event::<RestartEvent>()
             .add_systems(Startup, setup)
             .add_systems(
                 Update,
@@ -72,14 +73,15 @@ impl Plugin for BattlefieldPlugin {
                         .run_if(game_is_going)
                         .after(handle_bullet_tile_collision),
                     handle_trigger_events
-                        .run_if(game_is_going)
-                        .after(handle_bullet_turret_collision),
+                        .after(handle_bullet_turret_collision)
+                        .run_if(on_event::<TriggerEvent>().or_else(on_event::<RestartEvent>())),
                     update_charge_level.after(handle_trigger_events),
                     update_charge_ball.after(update_charge_level),
                     handle_elimination
                         .run_if(on_event::<EliminationEvent>())
                         .after(update_charge_level),
                     cleanup_particle_emitters.before(handle_bullet_tile_collision),
+                    restart.run_if(on_event::<RestartEvent>()),
                 ),
             )
             .add_systems(
@@ -115,6 +117,8 @@ impl EffectInstanceManager {
         self.pool.append(&mut self.dispatched);
     }
 }
+#[derive(Event, Default)]
+pub struct RestartEvent;
 #[derive(Event)]
 pub struct EliminationEvent {
     pub participant: Participant,
@@ -131,8 +135,10 @@ impl Default for SurvivorCount {
         Self(4)
     }
 }
-#[derive(Component)]
+#[derive(Component, Clone, Copy)]
 struct BattlefieldRoot;
+#[derive(Component, Clone, Copy)]
+struct TileRoot;
 /// Marker to mark this entity as a tile.
 #[derive(Component, Clone, Copy)]
 struct Tile;
@@ -511,29 +517,68 @@ fn setup(
             SpatialBundle::default(),
         ))
         .id();
-    let battlefield = commands
-        .spawn((Name::new("Battlefield"), SpatialBundle::default()))
+    let tile_root = commands
+        .spawn((Name::new("Tile Root"), (TileRoot, SpatialBundle::default())))
         .set_parent(root)
         .id();
+    setup_tiles(&mut commands, tile_root, &colors);
+    let mesh = Mesh2dHandle(meshes.add(Circle::new(1.0)));
+    let maps = setup_turrets(&mut commands, root, mesh.clone(), &materials);
+    commands.insert_resource(maps);
+    commands.insert_resource(BulletMesh(mesh));
+}
+fn rotate_turret(
+    time: Res<Time>,
+    mut stopwatch: ResMut<TurretStopwatch>,
+    mut turrets: Query<(&mut Transform, &BarrelOffset)>,
+) {
+    stopwatch.0.tick(time.delta());
+    let angle_offset = stopwatch.get();
+    for (mut transform, &BarrelOffset(base_offset)) in &mut turrets {
+        *transform = transform.with_rotation(Quat::from_rotation_z(base_offset + angle_offset));
+    }
+}
+fn update_charge_level(
+    mut commands: Commands,
+    mut query: Query<(Entity, &mut Charge, &Participant, Option<&Turret>), Changed<Charge>>,
+    mut event_writer: EventWriter<EliminationEvent>,
+) {
+    for (entity, mut charge, &participant, firing_queue) in &mut query {
+        if charge.value > 0 {
+            charge.update_level();
+        } else if firing_queue.is_some() {
+            event_writer.send(EliminationEvent::new(participant));
+        } else {
+            commands.entity(entity).despawn_recursive();
+        }
+    }
+}
+fn setup_tiles(commands: &mut Commands, tile_root: Entity, colors: &ParticipantMap<TileColor>) {
     for i in 0..TILE_COUNT {
         let x = TILE_DIMENSION / 2.0 + i as f32 * TILE_DIMENSION;
         for j in 0..TILE_COUNT {
             let y = TILE_DIMENSION / 2.0 + j as f32 * TILE_DIMENSION;
             commands
                 .spawn(TileBundle::new(Participant::A, colors.a.0, x, y))
-                .set_parent(battlefield);
+                .set_parent(tile_root);
             commands
                 .spawn(TileBundle::new(Participant::B, colors.b.0, -x, y))
-                .set_parent(battlefield);
+                .set_parent(tile_root);
             commands
                 .spawn(TileBundle::new(Participant::C, colors.c.0, x, -y))
-                .set_parent(battlefield);
+                .set_parent(tile_root);
             commands
                 .spawn(TileBundle::new(Participant::D, colors.d.0, -x, -y))
-                .set_parent(battlefield);
+                .set_parent(tile_root);
         }
     }
-    let mesh = Mesh2dHandle(meshes.add(Circle::new(1.0)));
+}
+fn setup_turrets(
+    commands: &mut Commands,
+    root: Entity,
+    mesh: Mesh2dHandle,
+    materials: &ParticipantMap<Handle<ColorMaterial>>,
+) -> ParticipantMap<Entity> {
     let mut spawn_turret = |owner: Participant, base_offset: f32, x: f32, y: f32| {
         let ball = commands
             .spawn(ChargeBallBundle::new(
@@ -563,34 +608,7 @@ fn setup(
     );
     let c = spawn_turret(Participant::C, FRAC_PI_2, TURRET_POSITION, -TURRET_POSITION);
     let d = spawn_turret(Participant::D, 0.0, -TURRET_POSITION, -TURRET_POSITION);
-    commands.insert_resource(ParticipantMap::new(a, b, c, d));
-    commands.insert_resource(BulletMesh(mesh));
-}
-fn rotate_turret(
-    time: Res<Time>,
-    mut stopwatch: ResMut<TurretStopwatch>,
-    mut turrets: Query<(&mut Transform, &BarrelOffset)>,
-) {
-    stopwatch.0.tick(time.delta());
-    let angle_offset = stopwatch.get();
-    for (mut transform, &BarrelOffset(base_offset)) in &mut turrets {
-        *transform = transform.with_rotation(Quat::from_rotation_z(base_offset + angle_offset));
-    }
-}
-fn update_charge_level(
-    mut commands: Commands,
-    mut query: Query<(Entity, &mut Charge, &Participant, Option<&Turret>), Changed<Charge>>,
-    mut event_writer: EventWriter<EliminationEvent>,
-) {
-    for (entity, mut charge, &participant, firing_queue) in &mut query {
-        if charge.value > 0 {
-            charge.update_level();
-        } else if firing_queue.is_some() {
-            event_writer.send(EliminationEvent::new(participant));
-        } else {
-            commands.entity(entity).despawn_recursive();
-        }
-    }
+    ParticipantMap::new(a, b, c, d)
 }
 fn update_charge_ball(
     mut balls: Query<
@@ -750,12 +768,17 @@ fn fire_shots(
     }
 }
 fn handle_trigger_events(
-    mut reader: EventReader<TriggerEvent>,
+    mut trigger_events: EventReader<TriggerEvent>,
+    mut restart_events: EventReader<RestartEvent>,
     turret_entities: Res<ParticipantMap<Entity>>,
     mut turret_query: Query<(&mut Charge, &mut Turret)>,
     time: Res<Time>,
 ) {
-    for event in reader.read() {
+    if !restart_events.is_empty() {
+        restart_events.clear();
+        trigger_events.clear();
+    }
+    for event in trigger_events.read() {
         let &entity = turret_entities.get(event.participant);
         let Ok((mut charge, mut turret)) = turret_query.get_mut(entity) else {
             continue;
@@ -913,4 +936,38 @@ pub fn game_is_going(survivor_count: Res<SurvivorCount>) -> bool {
 }
 fn cleanup_particle_emitters(mut instance_manager: ResMut<EffectInstanceManager>) {
     instance_manager.reset();
+}
+fn restart(
+    mut commands: Commands,
+    mut survivor_count: ResMut<SurvivorCount>,
+    mut survivors: ResMut<ParticipantMap<bool>>,
+    mut turrets: ResMut<ParticipantMap<Entity>>,
+    mut stopwatch: ResMut<TurretStopwatch>,
+    colors: Res<ParticipantMap<TileColor>>,
+    materials: Res<ParticipantMap<Handle<ColorMaterial>>>,
+    ball_mesh: Res<BulletMesh>,
+    tile_root: Query<(Entity, &Children), With<TileRoot>>,
+    garbage: Query<Entity, Or<(With<Bullet>, With<NewBullet>, With<Turret>)>>,
+    root: Query<Entity, With<BattlefieldRoot>>,
+) {
+    survivor_count.0 = 4;
+    survivors.a = true;
+    survivors.b = true;
+    survivors.c = true;
+    survivors.d = true;
+    for entity in garbage.iter() {
+        commands.entity(entity).despawn_recursive();
+    }
+    let (tile_root_entity, tile_root_children) = tile_root.single();
+    for &tile in tile_root_children.iter() {
+        commands.entity(tile).despawn_recursive();
+    }
+    setup_tiles(&mut commands, tile_root_entity, &colors);
+    *turrets = setup_turrets(
+        &mut commands,
+        root.single(),
+        ball_mesh.0.clone(),
+        &materials,
+    );
+    stopwatch.0.reset();
 }

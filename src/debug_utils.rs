@@ -16,7 +16,7 @@ impl Plugin for DebugUtilsPlugin {
         // app.add_plugins(bevy_inspector_egui::quick::WorldInspectorPlugin::new())
         // app.add_plugins(bevy_rapier2d::render::RapierDebugRenderPlugin::default())
         app.insert_resource(AutoTimer::default())
-            .add_systems(Update, auto_fire);
+            .add_systems(Update, auto_elimination);
     }
 }
 
@@ -24,7 +24,7 @@ impl Plugin for DebugUtilsPlugin {
 struct AutoTimer(Timer);
 impl Default for AutoTimer {
     fn default() -> Self {
-        Self(Timer::from_seconds(0.7, TimerMode::Repeating))
+        Self(Timer::from_seconds(10.0, TimerMode::Once))
     }
 }
 fn auto_hanabi(
@@ -108,5 +108,10 @@ fn auto_multiply(
             participant: Participant::A,
             trigger_type: TriggerType::Multiply(4),
         });
+    }
+}
+fn print_trigger_events(mut events: EventReader<TriggerEvent>) {
+    for event in events.read() {
+        println!("{:#?}", event);
     }
 }

@@ -1,9 +1,9 @@
 #![allow(clippy::type_complexity, clippy::too_many_arguments)]
 
 use crate::{
-    battlefield::game_is_going,
+    battlefield::{game_is_going, RestartEvent},
     collision_groups::{self, PANEL_OBSTACLES, PANEL_TRIGGER_ZONES},
-    utils::{EffectPropertiesExt, ParticipantMap, TileColor, TrailEffect, SPAWN_COLOR_PROPERTY},
+    utils::{EffectPropertiesExt, ParticipantMap, TileColor, TrailEffect, TRAIL_LIFETIME},
     Participant,
 };
 use bevy::{
@@ -108,11 +108,17 @@ impl Plugin for PanelPlugin {
                 Update,
                 spawn_workers.run_if(game_is_going.and_then(spawn_workers_condition)),
             )
-            .add_systems(Update, (trigger_event, ball_reset).run_if(game_is_going))
+            .add_systems(Update, ball_reset.run_if(game_is_going))
+            .add_systems(
+                Update,
+                trigger_event
+                    .run_if(on_event::<CollisionEvent>().or_else(on_event::<RestartEvent>())),
+            )
             .add_systems(
                 Update,
                 update_workers_particle_position.before(spawn_workers),
-            );
+            )
+            .add_systems(Update, restart.run_if(on_event::<RestartEvent>()));
     }
 }
 
@@ -182,6 +188,8 @@ impl TriggerZoneBundle {
 }
 #[derive(Component, Clone, Copy)]
 struct WorkerBallTrail(Entity);
+#[derive(Component, Clone, Copy)]
+struct InactiveWorkerBallTrail(bool);
 #[derive(Bundle, Clone)]
 struct WorkerBallTrailBundle {
     // {{{
@@ -216,6 +224,26 @@ struct WorkerBallSpawner {
     mesh: Mesh2dHandle,
     timer: Timer,
     counter: usize,
+}
+impl WorkerBallSpawner {
+    fn new(mesh: Mesh2dHandle) -> Self {
+        let mut timer = Timer::from_seconds(WORKER_BALL_SPAWN_TIMER_SECS, TimerMode::Repeating);
+        timer.tick(Duration::from_secs_f32(
+            WORKER_BALL_SPAWN_TIMER_SECS - TRAIL_LIFETIME,
+        ));
+        Self {
+            mesh,
+            timer,
+            counter: 0,
+        }
+    }
+    fn reset(&mut self) {
+        self.timer.reset();
+        self.timer.tick(Duration::from_secs_f32(
+            WORKER_BALL_SPAWN_TIMER_SECS - TRAIL_LIFETIME,
+        ));
+        self.counter = 0;
+    }
 }
 #[derive(Bundle, Clone, Default)]
 struct WorkerBallBundle {
@@ -373,13 +401,9 @@ fn setup(
     mut materials: ResMut<Assets<ColorMaterial>>,
     mut meshes: ResMut<Assets<Mesh>>,
 ) {
-    let mut timer = Timer::from_seconds(WORKER_BALL_SPAWN_TIMER_SECS, TimerMode::Repeating);
-    timer.tick(Duration::from_secs_f32(WORKER_BALL_SPAWN_TIMER_SECS - 0.2));
-    commands.insert_resource(WorkerBallSpawner {
-        mesh: Mesh2dHandle(meshes.add(Circle::new(WORKER_BALL_RADIUS))),
-        timer,
-        counter: 0,
-    });
+    commands.insert_resource(WorkerBallSpawner::new(Mesh2dHandle(
+        meshes.add(Circle::new(WORKER_BALL_RADIUS)),
+    )));
     let left_root = commands
         .spawn((
             Name::new("Left Panel Root"),
@@ -431,14 +455,14 @@ fn setup(
         .mesh(meshes.add(Circle::new(CIRCLE_RADIUS)))
         .collider(Collider::ball(CIRCLE_RADIUS));
 
-    let length = TRIGGER_ZONE_DIVIDER_HEIGHT_OFFSET + TRIGGER_ZONE_HEIGHT;
+    const LENGTH: f32 = TRIGGER_ZONE_DIVIDER_HEIGHT_OFFSET + TRIGGER_ZONE_HEIGHT;
     let divider_builder = ObstacleBundleBuilder::new()
         .name("Trigger Zone Divider")
         .z(TRIGGER_ZONE_DIVIDER_Z)
         .material(materials.add(TRIGGER_ZONE_DIVIDER_COLOR))
-        .mesh(meshes.add(Capsule2d::new(TRIGGER_ZONE_DIVIDER_RADIUS, length)))
+        .mesh(meshes.add(Capsule2d::new(TRIGGER_ZONE_DIVIDER_RADIUS, LENGTH)))
         .collider(Collider::capsule_y(
-            length / 2.0,
+            LENGTH / 2.0,
             TRIGGER_ZONE_DIVIDER_RADIUS,
         ));
 
@@ -651,12 +675,14 @@ fn spawn_workers(
     survivors: Res<ParticipantMap<bool>>,
     root: Query<(Entity, &GlobalTransform, &PanelRoot)>,
     effect: Res<TrailEffect>,
+    mut trail_query: Query<(Entity, &mut EffectProperties, &InactiveWorkerBallTrail)>,
 ) {
     spawner.timer.tick(time.delta());
     if !spawner.timer.just_finished() {
         return;
     }
-    let mut f = |a, b, root_entity, root_transform: &GlobalTransform| {
+    // TODO: handle trail effect
+    let mut f = |a, b, root_entity, root_transform: &GlobalTransform, want_left| {
         let root_translation = root_transform.translation();
         let collider = Collider::ball(WORKER_BALL_RADIUS);
         let mut caster = WorkerBallShapeCaster::new(
@@ -695,36 +721,43 @@ fn spawn_workers(
                         break;
                     }
                 }
-                let ball_a = commands
-                    .spawn(WorkerBallBundle::new(
-                        a,
-                        xa,
-                        spawner.mesh.clone(),
-                        materials.get(a).clone(),
-                    ))
-                    .set_parent(root_entity)
-                    .id();
-                commands.spawn(WorkerBallTrailBundle::new(
-                    ball_a,
-                    xa + root_translation.x,
-                    colors.get(a).0,
-                    effect.0.clone(),
-                ));
-                let ball_b = commands
-                    .spawn(WorkerBallBundle::new(
-                        b,
-                        xb,
-                        spawner.mesh.clone(),
-                        materials.get(b).clone(),
-                    ))
-                    .set_parent(root_entity)
-                    .id();
-                commands.spawn(WorkerBallTrailBundle::new(
-                    ball_b,
-                    xb + root_translation.x,
-                    colors.get(b).0,
-                    effect.0.clone(),
-                ));
+                let mut trail_query_iter = trail_query.iter_mut().filter_map(
+                    |(e, p, &InactiveWorkerBallTrail(is_left))| {
+                        (is_left == want_left).then_some((e, p))
+                    },
+                );
+                let mut setup_trail = |participant, x| {
+                    let ball = commands
+                        .spawn(WorkerBallBundle::new(
+                            participant,
+                            x,
+                            spawner.mesh.clone(),
+                            materials.get(participant).clone(),
+                        ))
+                        .set_parent(root_entity)
+                        .id();
+                    if let Some((trail_entity, mut trail_properties)) = trail_query_iter.next() {
+                        commands
+                            .entity(trail_entity)
+                            .insert(WorkerBallTrail(ball))
+                            .remove::<InactiveWorkerBallTrail>();
+                        trail_properties.set_spawn_color(colors.get(participant).0);
+                        trail_properties.set_position(Vec3::new(
+                            x + root_translation.x,
+                            WORKER_BALL_SPAWN_Y,
+                            0.0,
+                        ));
+                    } else {
+                        commands.spawn(WorkerBallTrailBundle::new(
+                            ball,
+                            x + root_translation.x,
+                            colors.get(participant).0,
+                            effect.0.clone(),
+                        ));
+                    }
+                };
+                setup_trail(a, xa);
+                setup_trail(b, xb);
             }
         }
     };
@@ -736,34 +769,56 @@ fn spawn_workers(
         (PanelRootSide::Right, PanelRootSide::Left) => (root1, root0),
         _ => panic!("{}", EXPECT_EACH_PANEL_SIDE_EXIST_MSG),
     };
-    f(Participant::A, Participant::B, left_root.0, left_root.1);
-    f(Participant::C, Participant::D, right_root.0, right_root.1);
+    f(
+        Participant::A,
+        Participant::B,
+        left_root.0,
+        left_root.1,
+        true,
+    );
+    f(
+        Participant::C,
+        Participant::D,
+        right_root.0,
+        right_root.1,
+        false,
+    );
     spawner.counter += 1;
 }
 fn update_workers_particle_position(
+    mut commands: Commands,
+    mut query: Query<((Entity, &WorkerBallTrail), &mut EffectProperties)>,
     transform_query: Query<&GlobalTransform>,
-    mut query: Query<(&WorkerBallTrail, &mut EffectProperties)>,
+    mut go_left: Local<bool>,
 ) {
-    for (&WorkerBallTrail(ball_entity), mut properties) in &mut query {
+    for ((trail_entity, &WorkerBallTrail(ball_entity)), mut properties) in &mut query {
         if let Ok(transform) = transform_query.get(ball_entity) {
             properties.set_position(transform.translation());
         } else {
             // Despawning the particle effect causes immense lag for some reason,
             // so instead we just leave it running but make it invisible
-            EffectProperties::set_if_changed(
-                properties,
-                SPAWN_COLOR_PROPERTY,
-                LinearRgba::NONE.as_u32().into(),
-            );
+            commands
+                .entity(trail_entity)
+                .insert(InactiveWorkerBallTrail(*go_left))
+                .remove::<WorkerBallTrail>();
+            let x = if *go_left { LEFT_ROOT_X } else { RIGHT_ROOT_X };
+            properties.set_spawn_color(LinearRgba::NONE);
+            properties.set_position(Vec3::new(x, WORKER_BALL_SPAWN_Y, 0.0));
+            *go_left = !*go_left;
         }
     }
 }
 fn trigger_event(
     mut collision_events: EventReader<CollisionEvent>,
-    mut event_writer: EventWriter<TriggerEvent>,
+    mut restart_event: EventReader<RestartEvent>,
+    mut trigger_event: EventWriter<TriggerEvent>,
     trigger_zone_query: Query<&TriggerType>,
     worker_ball_query: Query<&Participant, With<WorkerBall>>,
 ) {
+    if !restart_event.is_empty() {
+        collision_events.clear();
+        restart_event.clear();
+    }
     for collision_event in collision_events.read() {
         match collision_event {
             &CollisionEvent::Started(a, b, _) => {
@@ -781,19 +836,13 @@ fn trigger_event(
                 } else {
                     continue;
                 };
-                event_writer.send(TriggerEvent {
+                trigger_event.send(TriggerEvent {
                     participant,
                     trigger_type,
                 });
             }
             CollisionEvent::Stopped(_, _, _) => (),
         }
-    }
-}
-#[allow(dead_code)]
-fn print_trigger_events(mut events: EventReader<TriggerEvent>) {
-    for event in events.read() {
-        println!("{:#?}", event);
     }
 }
 fn ball_reset(
@@ -886,5 +935,24 @@ impl<'a, 'b, D: Distribution<f32>> WorkerBallShapeCaster<'a, 'b, D> {
             }
         }
         unreachable!("`self.rng_iter: DistIter` is an infinite iterator.");
+    }
+}
+fn restart(
+    mut commands: Commands,
+    mut spawner: ResMut<WorkerBallSpawner>,
+    mut trails: Query<(&mut EffectProperties, &mut InactiveWorkerBallTrail)>,
+    garbage: Query<Entity, With<WorkerBall>>,
+) {
+    spawner.reset();
+    for entity in garbage.iter() {
+        commands.entity(entity).despawn_recursive();
+    }
+    let mut go_left = false;
+    for (mut properties, mut trail) in trails.iter_mut() {
+        let x = if go_left { LEFT_ROOT_X } else { RIGHT_ROOT_X };
+        properties.set_spawn_color(LinearRgba::NONE);
+        properties.set_position(Vec3::new(x, WORKER_BALL_SPAWN_Y, 0.0));
+        trail.0 = go_left;
+        go_left = !go_left;
     }
 }

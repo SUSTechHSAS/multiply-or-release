@@ -29,7 +29,7 @@ fn main() {
         .add_plugins(RapierPhysicsPlugin::<NoUserData>::default())
         .add_plugins(HanabiPlugin)
         .add_plugins((UtilsPlugin, PanelPlugin, BattlefieldPlugin, UIPlugin))
-        // .add_plugins(debug_utils::DebugUtilsPlugin)
+        .add_plugins(debug_utils::DebugUtilsPlugin)
         .add_systems(Startup, setup)
         .run();
 }
