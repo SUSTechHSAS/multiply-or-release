@@ -46,6 +46,8 @@ const BULLET_DENSITY_FACTOR: f32 = 5.0;
 const BULLET_RESTITUTION_COEFFICIENT: f32 = 0.75;
 const CHARGED_SHOT_BULLET_SPEED: f32 = 250.0;
 const BURST_SHOT_BULLET_SPEED: f32 = 500.0;
+/// Time in seconds the turret will stop firing for after firing a charged shot.
+const CHARGED_SHOT_COOLDOWN: f32 = 0.5;
 
 // Z-index
 const TILE_Z: f32 = -1.0;
@@ -364,12 +366,14 @@ enum ShotType {
 struct Turret {
     firing_queue: VecDeque<(ShotType, Charge)>,
     last_hit_timestamp: f32,
+    last_charged_shot_timestamp: f32,
 }
 impl Default for Turret {
     fn default() -> Self {
         Self {
             firing_queue: VecDeque::new(),
             last_hit_timestamp: -TURRET_BOOST_COOLDOWN,
+            last_charged_shot_timestamp: -CHARGED_SHOT_COOLDOWN,
         }
     }
 }
@@ -710,8 +714,12 @@ fn fire_shots(
     mut turrets: Query<(&mut Turret, &Transform, &Participant, &TurretPlatformLink)>,
     platform_query: Query<&BarrelOffset>,
     battlefield_root: Query<Entity, With<BattlefieldRoot>>,
+    time: Res<Time>,
 ) {
     for (mut turret, transform, &owner, &TurretPlatformLink(link)) in &mut turrets {
+        if time.elapsed_seconds() - turret.last_charged_shot_timestamp < CHARGED_SHOT_COOLDOWN {
+            continue;
+        }
         let Some((shot_type, charge)) = turret.firing_queue.pop_back() else {
             continue;
         };
@@ -725,6 +733,7 @@ fn fire_shots(
             ShotType::Charged => {
                 let radius = charge.get_scale();
                 let offset = get_offset(radius);
+                turret.last_charged_shot_timestamp = time.elapsed_seconds();
                 (charge, offset, CHARGED_SHOT_BULLET_SPEED)
             }
             ShotType::Multi => {
