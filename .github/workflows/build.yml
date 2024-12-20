@@ -36,7 +36,7 @@ jobs:
           # Artifact name
           name: windows-build
           # A file, directory or wildcard pattern that describes what to upload
-          path: ./target/*/multiply-or-release.exe
+          path: ./target/*/multiply_or_release.exe
           # The desired behavior if no files are found using the provided path.
 
 
@@ -70,5 +70,5 @@ jobs:
           # Artifact name
           name: linux-build
           # A file, directory or wildcard pattern that describes what to upload
-          path: ./target/*/multiply-or-release
+          path: ./target/*/multiply_or_release
           # The desired behavior if no files are found using the provided path.
