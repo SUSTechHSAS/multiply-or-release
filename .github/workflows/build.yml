@@ -55,6 +55,9 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-build-${{ env.cache-name }}-
 
+      - name: pre-build
+        run: sudo apt-get install -y libudev-dev libasound2-dev
+
       - name: build-debug
         run: cargo build --verbose
       - name: build-release
