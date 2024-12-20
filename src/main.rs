@@ -19,7 +19,7 @@ fn main() {
     let window_plugin = WindowPlugin {
         primary_window: Some(Window {
             title: WINDOW_TITLE.to_string(),
-            mode: bevy::window::WindowMode::BorderlessFullscreen,
+            mode: bevy::window::WindowMode::Windowed,
             ..default()
         }),
         ..default()
