@@ -111,13 +111,24 @@ jobs:
       - build-on-linux
 
     steps:
-      - name: download-build
+      - name: download-windows-build
         uses: actions/download-artifact@v4.1.8
         with:
           # Name of the artifact to download. If unspecified, all artifacts for the run are downloaded.
-          name: "*-build-release"
+          name: windows-build-release
           # Destination path. Supports basic tilde expansion. Defaults to $GITHUB_WORKSPACE
           path: ./release/
+
+      - name: download-linux-build
+        uses: actions/download-artifact@v4.1.8
+        with:
+          # Name of the artifact to download. If unspecified, all artifacts for the run are downloaded.
+          name: linux-build-release
+          # Destination path. Supports basic tilde expansion. Defaults to $GITHUB_WORKSPACE
+          path: ./release/
+
+      - name: test
+        run: ls ./release
 
       - uses: ncipollo/release-action@v1
         with:
