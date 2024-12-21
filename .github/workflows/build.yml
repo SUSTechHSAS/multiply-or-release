@@ -51,7 +51,7 @@ jobs:
         uses: actions/upload-artifact@v4.5.0
         with:
           # Artifact name
-          name: windows-build-debug
+          name: windows-build-release
           # A file, directory or wildcard pattern that describes what to upload
           path: ./target/release/multiply_or_release.exe
 
