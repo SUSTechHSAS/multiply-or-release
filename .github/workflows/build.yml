@@ -49,7 +49,8 @@ jobs:
           token: ${{ secrets.RELEASE_TOKEN }}
           commit: "refs/heads/main"
           prerelease: true
-          tag: "action-release"
+          tag: ${{ runner.os }}-build-${{ hashFiles('./target/release/multiply_or_release.exe') }}
+          artifactErrorsFailBuild: false
 
 
   build-on-linux:
@@ -93,4 +94,5 @@ jobs:
           token: ${{ secrets.RELEASE_TOKEN }}
           commit: "refs/heads/main"
           prerelease: true
-          tag: "action-release"
+          tag: ${{ runner.os }}-build-${{ hashFiles('./target/release/multiply_or_release') }}
+          artifactErrorsFailBuild: false
