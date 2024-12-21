@@ -53,7 +53,7 @@ jobs:
           token: ${{ secrets.RELEASE_TOKEN }}
           commit: "refs/heads/main"
           prerelease: true
-          tag: ${{ runner.os }}-action-build-${{ GITHUB_SHA }}
+          tag: ${{ runner.os }}-action-build-${{ github.sha }}
           artifactErrorsFailBuild: false
 
 
@@ -98,5 +98,5 @@ jobs:
           token: ${{ secrets.RELEASE_TOKEN }}
           commit: "refs/heads/main"
           prerelease: true
-          tag: ${{ runner.os }}-action-build-${{ GITHUB_SHA }}
+          tag: ${{ runner.os }}-action-build-${{ github.sha }}
           artifactErrorsFailBuild: false
