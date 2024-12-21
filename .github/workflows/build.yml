@@ -2,6 +2,8 @@ name: Rust
 
 on:
   push:
+    tags-ignore:
+      - "**-action-build-**"
   workflow_dispatch:
 
 env:
@@ -49,7 +51,7 @@ jobs:
           token: ${{ secrets.RELEASE_TOKEN }}
           commit: "refs/heads/main"
           prerelease: true
-          tag: ${{ runner.os }}-build-${{ hashFiles('./target/release/multiply_or_release.exe') }}
+          tag: ${{ runner.os }}-action-build-${{ hashFiles('./target/release/multiply_or_release.exe') }}
           artifactErrorsFailBuild: false
 
 
@@ -94,5 +96,5 @@ jobs:
           token: ${{ secrets.RELEASE_TOKEN }}
           commit: "refs/heads/main"
           prerelease: true
-          tag: ${{ runner.os }}-build-${{ hashFiles('./target/release/multiply_or_release') }}
+          tag: ${{ runner.os }}-action-build-${{ hashFiles('./target/release/multiply_or_release') }}
           artifactErrorsFailBuild: false
