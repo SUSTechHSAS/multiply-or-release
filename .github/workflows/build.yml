@@ -127,15 +127,12 @@ jobs:
           # Destination path. Supports basic tilde expansion. Defaults to $GITHUB_WORKSPACE
           path: ./release/
 
-      - name: test
-        run: ls ./release
-
       - uses: ncipollo/release-action@v1
         with:
           artifacts: "./release/*"
           token: ${{ secrets.RELEASE_TOKEN }}
           commit: "refs/heads/main"
           prerelease: true
-          tag: -action-build-${{ github.sha }}
+          tag: bundle-action-build-${{ github.sha }}
           artifactErrorsFailBuild: false
 
