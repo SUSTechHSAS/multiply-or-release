@@ -49,6 +49,7 @@ jobs:
           token: ${{ secrets.RELEASE_TOKEN }}
           commit: "refs/heads/main"
           prerelease: true
+          tag: "action-release"
 
 
   build-on-linux:
@@ -92,3 +93,4 @@ jobs:
           token: ${{ secrets.RELEASE_TOKEN }}
           commit: "refs/heads/main"
           prerelease: true
+          tag: "action-release"
