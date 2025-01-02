@@ -103,6 +103,51 @@ jobs:
           # The desired behavior if no files are found using the provided path.
 
 
+
+
+
+  build-on-macos:
+    runs-on: macos-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Cache
+        uses: actions/cache@v4.2.0
+        env:
+          cache-name: cache-cargo
+        with:
+          path: |
+            ./target
+            ~/.cargo
+          key: ${{ runner.os }}-build-${{ env.cache-name }}-${{ hashFiles('./Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-build-${{ env.cache-name }}-
+
+      - name: build-debug
+        run: cargo build
+      - name: build-release
+        run: cargo build --release
+
+      - name: upload-debug-build
+        uses: actions/upload-artifact@v4.5.0
+        with:
+          # Artifact name
+          name: macos-build-debug
+          # A file, directory or wildcard pattern that describes what to upload
+          path: ./target/debug/multiply_or_release**
+          # The desired behavior if no files are found using the provided path.
+
+      - name: upload-release-build
+        uses: actions/upload-artifact@v4.5.0
+        with:
+          # Artifact name
+          name: macos-build-release
+          # A file, directory or wildcard pattern that describes what to upload
+          path: ./target/release/multiply_or_release**
+          # The desired behavior if no files are found using the provided path.
+
+
   upload-release:
     runs-on: ubuntu-latest
 
